@@ -9515,19 +9515,59 @@
             maxAllowedSteel = totalSmelters - smelterIridiumCount;
         }
 
-        // We have more steel than we can afford OR iron income is too low
-        if (smelterSteelCount > maxAllowedSteel || smelterSteelCount > 0 && ironWeighting > steelWeighting) {
-            smeltAdjust.Steel--;
+        // Steel and Iron share a part of maxAllowedSteel.
+        let smeltersToSplit = totalSmelters - smelterIridiumCount;
+        let baseSteelRatio = ironWeighting > 0 ? steelWeighting / ironWeighting : 1;
+
+        let allowIronSmelting = resources.Iron.storageRatio < 0.99;
+        let allowSteelSmelting = (resources.Steel.storageRatio < 0.99) || (resources.Titanium.storageRatio < 0.99 && haveTech("titanium"));
+
+        let newWantedIronCount = 0;
+        let newWantedSteelCount = 0;
+
+        // CONFIGURABLES
+        let maxSteelRatio = totalSmelters < 10 ? 1.0 : 0.9; // At 0.9, max 90% of non-Iridium smelters can be Steel (10% Iron rounded up)
+        let minIron = totalSmelters < 10 ? 0 : 2;
+        let maxIron = 10;
+
+        if(allowIronSmelting && allowSteelSmelting) {
+            // Split to ratio...
+            let usedSteelRatio = baseSteelRatio < maxSteelRatio ? baseSteelRatio : maxSteelRatio;
+            newWantedIronCount = Math.ceil((1-usedSteelRatio) * smeltersToSplit);
+            newWantedSteelCount = Math.floor(usedSteelRatio * smeltersToSplit);
+
+            // ...now apply min/max iron caps
+            if (minIron >= 0 && newWantedIronCount < minIron) {
+                // Take from steel
+                newWantedSteelCount -= (minIron - newWantedIronCount);
+                newWantedIronCount = minIron;
+            }
+            else if (maxIron >= 0 && newWantedIronCount > maxIron) {
+                // Add to steel
+                newWantedSteelCount += (newWantedIronCount - maxIron);
+                newWantedIronCount = maxIron;
+            }
+        }
+        else if (allowIronSmelting) {
+            // All iron
+            maxSteelRatio = 0;
+            newWantedIronCount = smeltersToSplit;
+        }
+        else if (allowSteelSmelting) {
+            // All steel
+            maxSteelRatio = 1;
+            newWantedSteelCount = smeltersToSplit;
+        }
+        else {
+            // Leave at 0/0 if nothing allowed
         }
 
-        // We can afford more steel AND either steel income is too low OR both steel and iron full, but we can use steel smelters to increase titanium income
-        if (smelterSteelCount < maxAllowedSteel && smelterIronCount > 0 &&
-             ((steelWeighting > ironWeighting) ||
-              (steelWeighting <= 0 && ironWeighting <= 0 && resources.Titanium.storageRatio < 0.99 && haveTech("titanium")))) {
-            smeltAdjust.Steel++;
-        }
+        // Compare to actual smelters.
+        smeltAdjust.Iron = newWantedIronCount - smelterIronCount;
+        smeltAdjust.Steel = newWantedSteelCount - smelterSteelCount;
 
-        smeltAdjust.Iron = totalSmelters - (smelterIronCount + smelterSteelCount + smeltAdjust.Steel + smelterIridiumCount + smeltAdjust.Iridium);
+        //console.debug("smeltAdjust: %o / baseSteelRatio: %f", smeltAdjust, baseSteelRatio);
+
         Object.entries(smeltAdjust).forEach(([id, delta]) => delta < 0 && m.decreaseSmelting(id, delta * -1));
         Object.entries(smeltAdjust).forEach(([id, delta]) => delta > 0 && m.increaseSmelting(id, delta));
     }

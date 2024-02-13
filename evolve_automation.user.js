@@ -49,6 +49,10 @@
 
 (function($) {
     'use strict';
+
+    // Export script info to the window.
+    var debugMode = false;
+
     var settingsRaw = JSON.parse(localStorage.getItem('settings')) ?? {};
     var settings = {};
     var game = null;
@@ -18782,6 +18786,28 @@
         messageQueue: (msg, color, dnr, tags) => game.messageQueue(msg, color, dnr, cloneInto(tags, unsafeWindow)),
         shipCosts: (bp) => game.shipCosts(cloneInto(bp, unsafeWindow)),
     };
+
+    // Export several important variables to the window object, for ease of testing
+    if (debugMode) {
+        var exportedToWindow = {
+            __note: "These variables should be considered read-only, interacting with them may produce undesired results depending on your current browser.",
+            buildings,
+            jobs,
+            state,
+            settings,
+            settingsRaw,
+            resources,
+            crafter,
+            projects,
+        };
+
+        if (typeof unsafeWindow !== 'undefined') {
+            unsafeWindow.autoEvolve = exportedToWindow;
+        }
+        else {
+            window.autoEvolve = exportedToWindow;
+        }
+    }
 
     $().ready(mainAutoEvolveScript);
 })($);

@@ -4973,6 +4973,8 @@
         nextShipAffordable: null,
         nextShipExpandable: null,
         nextShipMsg: null,
+        nextShipDesiredCrew: 0,
+        nextShipRegion: null,
 
         WeaponPower: {railgun: 36, laser: 64, p_laser: 54, plasma: 90, phaser: 114, disruptor: 156},
         SensorRange: {visual: 1, radar: 20, lidar: 35, quantum: 60},
@@ -5124,12 +5126,12 @@
             let count = 0;
             for (let ship of game.global.space.shipyard.ships) {
                 if (ship.location === loc
-                    && ship.class === template.class
-                    && ship.power === template.power
-                    && ship.weapon === template.weapon
-                    && ship.armor === template.armor
-                    && ship.engine === template.engine
-                    && ship.sensor === template.sensor) {
+                    && (template.class === null || ship.class === template.class)
+                    && (template.power === null || ship.power === template.power)
+                    && (template.weapon === null || ship.weapon === template.weapon)
+                    && (template.armor === null || ship.armor === template.armor)
+                    && (template.engine === null || ship.engine === template.engine)
+                    && (template.sensor === null || ship.sensor === template.sensor)) {
                     count++;
                 }
             }
@@ -10967,7 +10969,8 @@
                         //let protectedSoldiers = (game.global.race['armored'] ? 1 : 0) + (game.global.race['scales'] ? 1 : 0) + (game.global.tech['armor'] ?? 0);
                         //let woundCap = Math.ceil((game.global.space.fob.enemy + (game.global.tech.outer >= 4 ? 75 : 62.5)) / 5) - protectedSoldiers;
                         //let maxLanders = getHealingRate() < woundCap ? Math.floor((getHealingRate() + protectedSoldiers) / 1.5) : Number.MAX_SAFE_INTEGER;
-                        let healthySquads = Math.floor((WarManager.currentSoldiers - WarManager.wounded) / (3 * traitVal('high_pop', 0, 1)));
+                        let reservedSoldiers = settings.autoFleet ? FleetManagerOuter.nextShipDesiredCrew : 0;
+                        let healthySquads = Math.floor((WarManager.currentSoldiers - WarManager.wounded - reservedSoldiers) / (3 * traitVal('high_pop', 0, 1)));
                         maxStateOn = Math.min(maxStateOn, healthySquads /*, maxLanders*/ );
                     }
                 }
@@ -11817,6 +11820,12 @@
 
     function autoFleetOuter() {
         let m = FleetManagerOuter;
+        m.nextShipDesiredCrew = 0; // Should always be set to 0 unless eval result is short on crew
+
+        // To let users make ship adjustments via script
+        let previousTargetRegion = m.nextShipRegion;
+        m.nextShipRegion = null; // Should always be set to null if region not yet selected
+
         if (!m.initFleet()) {
             m.nextShipMsg = `No ships needed yet`;
             m.updateNextShip();
@@ -11847,12 +11856,21 @@
             minCrew = 0;
         } else {
             let scanEris = game.global.tech['eris'] === 1 && m.getWeighting("spc_eris") > 0 && m.syndicate("spc_eris", true, true).s < 50;
+            let scout = m.getScoutBlueprint();
+            // Assume scout class and sensor don't change but everything else is OK to change.
+            // TODO: Ideally this would all be based off region intel %.
+            let scoutToFind = {"class": scout["class"], "sensor": scout["sensor"], "power": null, "weapon": null, "armor": null, "engine": null};
             if (scanEris) {
                 targetRegion = "spc_eris";
                 minCrew = 0;
             } else {
-                let regionsToProtect = m.Regions.filter(reg => m.isUnlocked(reg) && m.getWeighting(reg) > 0 && m.syndicate(reg, false, true) < m.getMaxDefense(reg))
-                    .sort((a, b) => ((1 - m.syndicate(b, false, true)) * m.getWeighting(b))
+                let regionsToProtect = m.Regions.filter(reg => {
+                    if (!m.isUnlocked(reg) || m.getWeighting(reg) <= 0) return false;
+
+                    let needScout = m.shipCount(reg, scoutToFind) < m.getMaxScouts(reg);
+                    let needDefense = m.syndicate(reg, false, true) < m.getMaxDefense(reg);
+                    return needScout || needDefense;
+                }).sort((a, b) => ((1 - m.syndicate(b, false, true)) * m.getWeighting(b))
                                   - ((1 - m.syndicate(a, false, true)) * m.getWeighting(a)));
 
                 if (regionsToProtect.length < 1) {
@@ -11867,8 +11885,7 @@
                 newShip = m.avail(yard.blueprint) ? yard.blueprint : null;
             }
             else {
-                let scout = m.getScoutBlueprint();
-                if (m.avail(scout) && m.shipCount(targetRegion, scout) < m.getMaxScouts(targetRegion)) {
+                if (m.avail(scout) && m.shipCount(targetRegion, scoutToFind) < m.getMaxScouts(targetRegion)) {
                     newShip = scout;
                 }
                 if (!newShip) {
@@ -11876,6 +11893,14 @@
                     newShip = m.avail(fighter) ? fighter : null;
                 }
             }
+        }
+
+        // If we get here, set it as target region.
+        m.nextShipRegion = targetRegion;
+        // If we changed region, we need to wait 1 tick now.
+        if (previousTargetRegion !== targetRegion) {
+            m.nextShipMsg = `Waiting to dispatch to ${m.getLocName(targetRegion)}`;
+            return;
         }
 
         if (!newShip) {
@@ -11895,11 +11920,16 @@
 
         if (WarManager.currentCityGarrison - m.ClassCrew[newShip.class] < minCrew) {
             m.nextShipMsg = `Next ship(${m.nextShipName}) is missing crew`;
+            // This must ONLY be set here, and only needs to be set if the crew left-over isn't enough.
+            // We don't want to take crew from FOB landers until the very moment it's needed.
+            // It's set to 0 earlier in this function, so in all other cases it will be set to 0.
+            m.nextShipDesiredCrew = minCrew;
             return;
         }
 
         if (m.build(newShip, targetRegion)) {
             GameLog.logSuccess("outer_fleet", `${m.getShipName(newShip)} has been assembled, and dispatched to ${m.getLocName(targetRegion)}.`, ['combat']);
+            m.nextShipRegion = null; // Wait a tick between ship dispatches
         } else {
             m.nextShipMsg = `Invalid design! Next ship(${m.nextShipName}) is missing power`;
             return;

@@ -4530,6 +4530,7 @@
             if (foreignUnlocked) {
                 let currentTarget = null;
                 let controlledForeigns = 0;
+                let pendingControlledForeigns = 0;
 
                 let unlockedForeigns = [];
                 if (!haveTech("world_control")) {
@@ -4554,21 +4555,30 @@
                         (foreign.gov.occ && foreign.policy === "Occupy")) {
                         controlledForeigns++;
                     }
+                    else if (["purchase", "annex"].includes(foreign.gov.act) && foreign.gov.sab > 0) {
+                        pendingControlledForeigns++;
+                    }
 
                     if (!settings.foreignPacifist && !foreign.gov.anx && !foreign.gov.buy && rank === "Inferior") {
                         currentTarget = foreign;
                     }
                 }
 
+                let allowOccupy = (game.global.tech['unify'] === 1 || settings.foreignForceOccupy);
                 // Adjust for fight
                 if (activeForeigns.length > 0 && !settings.foreignPacifist) {
                     // Try to attacks last uncontrolled inferior, or first occupied, or just first, in this order.
                     currentTarget = currentTarget ?? activeForeigns.find(f => f.gov.occ) ?? activeForeigns[0];
 
-                    let readyToUnify = settings.foreignUnification && controlledForeigns >= 2 && game.global.tech['unify'] === 1;
+                    let readyToUnify = settings.foreignUnification && (controlledForeigns+pendingControlledForeigns) >= 2 && allowOccupy;
 
                     // Don't annex or purchase our farm target, unless we're ready to unify
                     if (!readyToUnify && ["Annex", "Purchase"].includes(currentTarget.policy) && SpyManager.isEspionageUseful(currentTarget.id, SpyManager.Types[currentTarget.policy].id)) {
+                        currentTarget.policy = "Ignore";
+                    }
+
+                    // Don't occupy our farm target if we're ready to unify, but still waiting on the timer for other nations
+                    if (readyToUnify && pendingControlledForeigns > 0 && currentTarget.policy === "Occupy") {
                         currentTarget.policy = "Ignore";
                     }
 
@@ -4590,7 +4600,7 @@
                 }
 
                 // Request money for unify, make sure we have autoFight and autoResearch
-                if (game.global.tech['unify'] === 1 && settings.foreignUnification && settings.autoFight) {
+                if (allowOccupy && settings.foreignUnification && settings.autoFight) {
                     for (let foreign of activeForeigns) {
                         if (foreign.policy === "Purchase" && !foreign.gov.buy && foreign.gov.act !== "purchase") {
                             let moneyNeeded = Math.max(poly.govPrice(foreign.id), (foreign.gov.spy < 3 ? this.spyCost(foreign.id, 3) : 0));
@@ -6871,6 +6881,7 @@
             foreignUnification: true,
             foreignForceSabotage: true,
             foreignOccupyLast: true,
+            foreignForceOccupy: false,
             foreignTrainSpy: true,
             foreignSpyMax: 2,
             foreignPowerRequired: 75,
@@ -15948,6 +15959,7 @@
         addSettingsToggle(currentNode, "foreignOccupyLast", "Occupy last foreign power", "Occupy last foreign power once other two are controlled, and unification is researched to speed up unification. Disable if you want annex\\purchase achievements.");
         addSettingsToggle(currentNode, "foreignForceSabotage", "Sabotage foreign power when useful", "Perform sabotage against current target if it's useful(power above 50), regardless of required power, and default action defined above");
         addSettingsToggle(currentNode, "foreignTrainSpy", "Train spies", "Train spies to use against foreign powers");
+        addSettingsToggle(currentNode, "foreignForceOccupy", "Force occupation before unification researched", "Initiate Purchase/Annex/Occupy actions before Unification is available, be careful about setting up Purchase too soon as it may prevent your game progress. Use with overrides.");
         addSettingsNumber(currentNode, "foreignSpyMax", "Maximum spies", "Maximum spies per foreign power");
 
         addSettingsNumber(currentNode, "foreignPowerRequired", "Military Power to switch target", "Switches to attack next foreign power once its power lowered down to this number. When exact numbers not know script tries to approximate it.");

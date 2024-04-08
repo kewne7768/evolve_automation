@@ -13348,48 +13348,65 @@
         }
     }
 
+    // We need to know the difference between returning null/undefined (possible bug in user eval, should warn) vs just returning nothing.
+    // This symbol is a specific placeholder value we return when none of the override conditions were met.
+    // The calling function should check against this and use its default behavior if returned.
+    const OVERRIDE_NO_VALUE = Symbol("evaluateOverride returned nothing");
+    function evaluateOverride(override, displayName, expectedType) {
+        let xorList = [];
+        for (let i = 0; i < override.length; i++) {
+            let check = override[i];
+            try {
+                if (!checkTypes[check.type1]) {
+                    throw `${check.type1} variable not found`;
+                }
+                if (!checkTypes[check.type2]) {
+                    throw `${check.type2} variable not found`;
+                }
+                if (!checkCompare[check.cmp]) {
+                    throw `${checkCompare[check.cmp]} comparator not found`;
+                }
+                let var1 = checkTypes[check.type1].fn(check.arg1);
+                let var2 = checkTypes[check.type2].fn(check.arg2);
+                if (!checkCompare[check.cmp](var1, var2)) {
+                    continue;
+                }
+                let ret = checkCustom[check.cmp] ? var2 : check.ret;
+
+                if (expectedType === "object") {
+                    xorList.push(ret);
+                } else if (expectedType === typeof ret) {
+                    return ret;
+                } else {
+                    throw `Expected type: ${expectedType}; Override type: ${typeof ret}`;
+                }
+            } catch (error) {
+                let msg = `Condition ${i + 1} for setting ${displayName} invalid! Fix or remove it. (${error})`;
+                if (!WindowManager.isOpen() && !Object.values(game.global.lastMsg.all).find(log => log.m === msg)) { // Don't spam with errors
+                    GameLog.logDanger("special", msg, ['events', 'major_events']);
+                }
+                continue; // Some argument not valid, skip condition
+            }
+        }
+        return (expectedType === "object" && xorList.length) ? xorList : OVERRIDE_NO_VALUE;
+    }
+
     function updateOverrides() {
         let xorLists = {};
         let overrides = {};
         for (let key in settingsRaw.overrides) {
-            let conditions = settingsRaw.overrides[key];
-            for (let i = 0; i < conditions.length; i++) {
-                let check = conditions[i];
-                try {
-                    if (!checkTypes[check.type1]) {
-                        throw `${check.type1} variable not found`;
-                    }
-                    if (!checkTypes[check.type2]) {
-                        throw `${check.type2} variable not found`;
-                    }
-                    if (!checkCompare[check.cmp]) {
-                        throw `${checkCompare[check.cmp]} comparator not found`;
-                    }
-                    let var1 = checkTypes[check.type1].fn(check.arg1);
-                    let var2 = checkTypes[check.type2].fn(check.arg2);
-                    if (!checkCompare[check.cmp](var1, var2)) {
-                        continue;
-                    }
-                    let ret = checkCustom[check.cmp] ? var2 : check.ret;
+            let result = evaluateOverride(settingsRaw.overrides[key], key, typeof settingsRaw[key]);
 
-                    if (typeof settingsRaw[key] === typeof ret) {
-                        // Override single value
-                        overrides[key] = ret;
-                        break;
-                    } else if (typeof settingsRaw[key] === "object") {
-                        // Xor lists
-                        xorLists[key] = xorLists[key] ?? [];
-                        xorLists[key].push(ret);
-                    } else {
-                        throw `Expected type: ${typeof settingsRaw[key]}; Override type: ${typeof ret}`;
-                    }
-                } catch (error) {
-                    let msg = `Condition ${i+1} for setting ${key} invalid! Fix or remove it. (${error})`;
-                    if (!WindowManager.isOpen() && !Object.values(game.global.lastMsg.all).find(log => log.m === msg)) { // Don't spam with errors
-                        GameLog.logDanger("special", msg, ['events', 'major_events']);
-                    }
-                    continue; // Some argument not valid, skip condition
-                }
+            if(result === OVERRIDE_NO_VALUE) {
+                // Didn't return anything - keep using default value
+            }
+            else if (typeof settingsRaw[key] !== "object") {
+                // Override single value
+                overrides[key] = result;
+            }
+            else {
+                // Xor lists
+                xorLists[key] = result;
             }
         }
 

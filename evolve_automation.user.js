@@ -51,7 +51,7 @@
     'use strict';
 
     // Export script info to the window.
-    var debugMode = false;
+    var debugMode = true;
 
     var settingsRaw = JSON.parse(localStorage.getItem('settings')) ?? {};
     var settings = {};

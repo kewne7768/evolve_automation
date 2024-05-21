@@ -2471,7 +2471,7 @@
         TauMission: new Action("Tau Mission", "tauceti", "home_mission", "tau_home"),
         TauDismantle: new Action("Tau Dismantle Ship", "tauceti", "dismantle", "tau_home"),
         TauOrbitalStation: new Action("Tau Orbital Station", "tauceti", "orbital_station", "tau_home"),
-        TauColony: new Action("Tau Colony", "tauceti", "colony", "tau_home", {housing: true}),
+        TauColony: new Action("Tau Colony", "tauceti", "colony", "tau_home", {housing: true, smart: true}),
         TauHousing: new Action("Tau Housing", "tauceti", "tau_housing", "tau_home", {housing: true}),
         TauCaptiveHousing: new CityAction("Tau Captive Housing", "tauceti", "captive_housing", "tau_home"),
         TauPylon: new Action("Tau Pylon", "tauceti", "pylon", "tau_home"),
@@ -2869,6 +2869,45 @@
           },
           (other) => `${other.title} gives more Max Supplies`,
           () => 0 // Find what's better - Port or Base
+        ],[
+            () => {
+                // Prioritizes building the best building during materials phase.
+                // Active only during materials phase while mining pits are buildable - after that, just let it build whatever.
+                // autoPower smart storage handling should always keep mining pits buildable until it's impossible
+                return game.global.tech.tauceti && game.global.tech.tauceti <= 4 &&
+                    buildings.TauOrbitalStation.isAutoBuildable() &&
+                    buildings.TauColony.isAutoBuildable() &&
+                    buildings.TauMiningPit.isAutoBuildable() && buildings.TauMiningPit.isAffordable(true);
+            },
+            (building) => {
+                if (building === buildings.TauOrbitalStation || building === buildings.TauColony || building === buildings.TauMiningPit) {
+                    let bestBuilding = null;
+                    // TODO: rateOfChange seems wrong for Tau_Support?
+                    let availSupport = Math.max(resources.Tau_Support.maxQuantity - resources.Tau_Support.currentQuantity, 0);
+                    let nextPitPower = (buildings.TauMiningPit.count + 1) * (1 + (buildings.TauColony.count * 0.5));
+                    let nextColonyPower = buildings.TauMiningPit.count * (1 + ((buildings.TauColony.count + 1) * 0.5));
+                    // Best solution at the start: build a second and third mining pit, turn colony off. Special case but big speedup.
+                    // HACK: Can't do this if missing support rule is set to 0 (it will make things worse in general)
+                    if (buildings.TauMiningPit.count < 3 && settings.buildingWeightingMissingSupport > 0) {
+                        bestBuilding = buildings.TauMiningPit;
+                    }
+                    // Need more mining pits for storage to build good buildings
+                    else if (!buildings.TauOrbitalStation.isAffordable(true) || !buildings.TauColony.isAffordable(true)) {
+                        bestBuilding = buildings.TauMiningPit;
+                    }
+                    // Colony needs 2 so we start building support if at exactly 1 support too
+                    else if (nextColonyPower > nextPitPower) {
+                        bestBuilding = (availSupport <= 1 && buildings.TauOrbitalStation.isAffordable(true)) ? buildings.TauOrbitalStation : buildings.TauColony;
+                    }
+                    else {
+                        bestBuilding = (availSupport === 0 && buildings.TauOrbitalStation.isAffordable(true)) ? buildings.TauOrbitalStation : buildings.TauMiningPit;
+                    }
+
+                    return (bestBuilding === building) ? undefined : bestBuilding;
+                }
+            },
+            (other) => `Best materials phase build: ${other.title}`,
+            () => 0 // Handle Tau Ceti materials
       ],[
           () => haveTech("waygate", 2),
           (building) => building === buildings.SpireWaygate,
@@ -3024,6 +3063,7 @@
                   let supplyIndex = building === buildings.SpirePort ? 1 : building === buildings.SpireBaseCamp ? 2 : -1;
                   if ((supplyIndex > 0 && (buildings.SpireMechBay.isSmartManaged() || buildings.SpirePurifier.isSmartManaged()))
                     && (building.count < getBestSupplyRatio(resources.Spire_Support.maxQuantity, buildings.SpirePort.autoMax, buildings.SpireBaseCamp.autoMax)[supplyIndex])) { return false; }
+                  if (game.global.tech.tauceti && game.global.tech.tauceti <= 4 && (building === buildings.TauColony || building === buildings.TauMiningPit)) { return false; }
                   return true;
               }
           },
@@ -10893,6 +10933,9 @@
 
         let manageTransport = buildings.LakeTransport.isSmartManaged() && buildings.LakeBireme.isSmartManaged();
         let manageSpire = buildings.SpirePort.isSmartManaged() && buildings.SpireBaseCamp.isSmartManaged();
+        // Mining pit has seperate smart behavior so only check Colony for this.
+        // Materials phase is active at tauceti 1-3, ended by building both jump gate sides and having the game grant tauceti 4
+        let manageTauCetiMaterials = buildings.TauColony.isSmartManaged() && game.global.tech.tauceti && game.global.tech.tauceti <= 4;
 
         // Start assigning buildings from the top of our priority list to the bottom
         for (let i = 0; i < buildingList.length; i++) {
@@ -10931,6 +10974,10 @@
             }
             // Lake transport managed separately
             if (manageTransport && (building === buildings.LakeTransport || building === buildings.LakeBireme)) {
+                continue;
+            }
+            // Tau Ceti materials managed separately
+            if (manageTauCetiMaterials && (building === buildings.TauColony || building === buildings.TauMiningPit)) {
                 continue;
             }
             if (building.is.smart && building.autoStateSmart) {
@@ -11349,6 +11396,55 @@
                     break;
                 }
             }
+        }
+
+        // Manages the Tau Ceti materials phase by force-enabling minimum number of mining pits needed to build next item.
+        // Required amount may change as buildings are built so this needs to run every tick while in materials phase.
+        if (manageTauCetiMaterials && resources.Tau_Support.maxQuantity > 0) {
+            const miningPitAmount = 1e6;
+            const tauSupport = resources.Tau_Support.maxQuantity;
+            let colony = buildings.TauColony, orbital = buildings.TauOrbitalStation, pit = buildings.TauMiningPit;
+            let nextColonyPitRequirement = Math.ceil((colony.cost?.Materials ?? -Infinity) / miningPitAmount);
+            let nextOrbitalPitRequirement = Math.ceil((orbital.cost?.Materials ?? -Infinity) / miningPitAmount);
+            let nextMiningPitPitRequirement = Math.ceil((pit.cost?.Materials ?? -Infinity) / miningPitAmount);
+            // We must target the maximum amount because of limitations in autoBuild weighting rules
+            // Non operating buildings check really messes things up
+            let minimumPits = Math.max(nextColonyPitRequirement, nextOrbitalPitRequirement, nextMiningPitPitRequirement);
+            // Bad math/never turn off all pits/need more pits than available for all options (all red)/can't support required number of pits
+            if (!isFinite(minimumPits) || minimumPits <= 0 || minimumPits > pit.count || minimumPits > tauSupport) {
+                minimumPits = 1;
+            }
+
+            let newPitCount = minimumPits;
+            let newColonyCount = 0;
+            let availableSupport = tauSupport - newPitCount;
+            // May cause an infinite loop if Infinity or NaN, avoid. Should never happen but there may be some edge cases with the game.
+            if (!isFinite(availableSupport)) {
+                throw "Avoiding infinite loop in manageTauCetiMaterials";
+            }
+            while (availableSupport > 0) {
+                // As long as we have 2 pits to turn on, we calculate for the +2 case instead, because 1 colony uses 2 support.
+                // Otherwise, we calculate for the +1 case. Will be fine even if we have 2 pits but only 1 support since adding the colony will fail.
+                let availablePits = Math.min(pit.count - newPitCount, 2);
+                let nextPitPower = (newPitCount + availablePits) * (1 + (newColonyCount * 0.5));
+                let nextColonyPower = newPitCount * (1 + ((newColonyCount + 1) * 0.5));
+                if (availableSupport >= 2 && (newColonyCount + 1) <= colony.count && (nextColonyPower > nextPitPower || !availablePits)) {
+                    availableSupport -= 2;
+                    newColonyCount++;
+                }
+                else if ((newPitCount + 1) <= pit.count) {
+                    availableSupport--;
+                    newPitCount++;
+                }
+                else {
+                    // Avoid infinite loop if more support than buildings
+                    break;
+                }
+            }
+
+            console.info("manageTauCetiMaterials: Setting to: %d colonies, %d pits", newColonyCount, newPitCount);
+            colony.tryAdjustState(newColonyCount - colony.stateOnCount);
+            pit.tryAdjustState(newPitCount - pit.stateOnCount);
         }
 
         resources.Power.currentQuantity = availablePower;

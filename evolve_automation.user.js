@@ -10801,8 +10801,10 @@
                     if (settings.autoEvolution) {
                         loadQueuedSettings(); // Cataclysm doesnt't have evolution stage, so we need to load settings here, before reset
                     }
-                    logPrestige();
-                    techIds["tech-dial_it_to_11"].click();
+                    if (techIds["tech-dial_it_to_11"].isClickable()) {
+                        logPrestige();
+                        techIds["tech-dial_it_to_11"].click();
+                    }
                 }
                 return;
             case 'whitehole':

@@ -5933,6 +5933,677 @@
             return false;
         },
     }
+    
+    /** @enum {number} */
+    const AdvTriggerState = {
+        Default: 0, // Default state
+        FolderDisabled: 1, // Folder is disabled - trigger ignored/not evaluated
+        TriggerDisabled: 2, // Trigger is disabled by user via toggle
+        ActionImpossible: 3, // TODO: Optimization if we know an action is never possible during the current run (path-exclusive buildings)
+        WaitBaseCondition: 4, // Waiting on the basic condition, override not yet evaluated
+        WaitActionAvailable: 5, // Action not yet unlocked
+        WaitOverrides: 6, // Evaluating override until a decisive answer comes
+        Active: 7, // Currently active trigger, will be built if possible
+        Complete: 8, // Trigger completed
+        Irrelevant: 9, // Override marked trigger irrelevant for this run, don't check anymore
+        UserRequestedSkip: 10, // User manually clicked X to skip trigger
+    };
+    const AdvTriggerStateNames = Object.fromEntries(Object.entries(AdvTriggerState).map(
+        ([key, val]) => [val, key.replace(/([^A-Z])([A-Z])/g, "$1 $2")]
+    ));
+    // States we can't move out of ourselves. These also activate chain triggers.
+    const AdvTriggerNonUpdateStates = [
+        AdvTriggerState.Complete,
+        AdvTriggerState.FolderDisabled,
+        AdvTriggerState.TriggerDisabled,
+        AdvTriggerState.ActionImpossible, 
+        AdvTriggerState.Irrelevant,
+        AdvTriggerState.UserRequestedSkip,
+    ];
+
+    const AdvTriggerRequirementTypeNames = {
+        "building": "Building",
+        "research": "Researched",
+        "buildingAvailable": "Building Available",
+        "researchAvailable": "Research Available",
+        "arpa": "ARPA",
+        "always": "Override Only",
+    };
+    const AdvTriggerActionTypeNames = {
+        "building": "Build",
+        "research": "Research",
+        "arpa": "ARPA",
+        "buildRepeatable": "Build (Repeatable)",
+        "arpaRepeatable": "ARPA (Repeatable)",
+    };
+
+    class AdvTrigger {
+        /** @type {string} */
+        id;
+
+        /** @type {AdvTriggerFolder} */
+        parent;
+
+        /** @type {AdvTriggerState} */
+        state = AdvTriggerState.Default;
+
+        needsUpdate = true;
+        rendered = false;
+
+        /**
+         * @typedef {Object} AdvTriggerCfg Configuration object for a single trigger
+         * @property {"building"|"research"|"buildingAvailable"|"researchAvailable"|"arpa"|"always"} requirementType
+         * @property {string} requirementId
+         * @property {number} requirementCount
+         * @property {"research"|"building"|"arpa"|"buildRepeatable"|"arpaRepeatable"} actionType
+         * @property {string} actionId
+         * @property {number} actionCount
+         * @property {number} priority Default priority (do not directly read)
+         * @property {Array} stateOverride Overrides for state
+         * @property {Array} priorityOverride Overrides for priority level
+         * @property {boolean} enabled User-configurable toggle
+         */
+        /** @type {AdvTriggerCfg} cfg */
+        cfg = {};
+
+        /** @type {HTMLTableRowElement} */
+        tr = document.createElement("tr");
+
+        /** @type {Action|Technology|Project|null} */
+        requirementTarget;
+
+        /** @type {Action|Technology|Project|null} */
+        actionTarget;
+
+        /**
+         * @param {string} id
+         * @param {AdvTriggerFolder} parent
+         * @param {AdvTriggerCfg} cfg
+         */
+        constructor(id, parent, cfg) {
+            this.id = id;
+            this.parent = parent;
+            this.cfg = Object.assign(this.defaultConfig(), cfg);
+            this.tr.dataset.triggerId = id;
+            this.updateTargets();
+        }
+
+        /** @returns {AdvTriggerCfg} */
+        static defaultConfig() {
+            return {
+                requirementType: "researchAvailable",
+                requirementId: "tech-club",
+                requirementCount: 1,
+                actionType: "research",
+                actionId: "tech-club",
+                actionCount: 1,
+                priority: 100,
+                stateOverride: [],
+                priorityOverride: [],
+                enabled: true,
+            };
+        }
+
+        static targetTypeIsRepeatable() {
+            return ["buildRepeatable", "arpaRepeatable"].includes(this.cfg.actionType);
+        }
+
+        static targetTypeHasCount(targetType) {
+            return ["building", "arpa"].includes(targetType);
+        }
+
+        /** @returns {Building|Technology|Project|null} */
+        static findTarget(targetType, targetId) {
+            targetType = targetType.replace(/Repeatable|Available/, "");
+            switch(targetType) {
+                case 'building':
+                    return buildingIds[targetId] || null;
+                case 'research':
+                    return techIds[targetId] || null;
+                case 'arpa':
+                    return arpaIds[targetId] || null;
+            }
+            return null;
+        }
+
+        // For error messages, nothing too fancy
+        get name() {
+            return `${this.cfg.requirementType} ${this?.requirementTarget?.name??'unknown'} => ${this.cfg.actionType} ${this?.actionTarget?.name??'unknown'}`;
+        }
+
+        updateTargets() {
+            this.requirementTarget = AdvTrigger.findTarget(this.cfg.requirementType, this.cfg.requirementId);
+            this.actionTarget = AdvTrigger.findTarget(this.cfg.actionType, this.cfg.actionId);
+        }
+
+        isComplete() {
+            return this.state === AdvTriggerState.Complete || this.state === AdvTriggerState.Irrelevant;
+        }
+
+        requirementIsComplete() {
+            // This checks the base requirement only.
+            if (this.cfg.requirementType === "always") return true;
+
+            if (this.cfg.requirementType === "chain") {
+                return this.parent.chainTriggerFor(this)?.isComplete() ?? true;
+            }
+
+            let req = this.mapTarget(this.cfg.requirementType, this.cfg.requirementId);
+            return req && req.count >= (AdvTrigger.targetTypeHasCount(this.cfg.requirementType) ? this.cfg.requirementCount : 1);
+        }
+
+        actionIsComplete() {
+            // Repeatable actions are never considered complete.
+            if (this.isRepeatable()) return false;
+
+            let action = this.mapTarget(this.cfg.actionType, this.cfg.actionId);
+            return action && action.count >= (AdvTrigger.targetTypeHasCount(this.cfg.actionType) ? this.cfg.actionCount : 1);
+        }
+
+        get priority() {
+            if (Array.isArray(this.cfg.priorityOverride) && this.cfg.priorityOverride.length) {
+                let num = evaluateOverride(this.cfg.priorityOverride, `${this.name} (priority)`, "number");
+                if (typeof num === "number") return num;
+            }
+            return this.cfg.priority;
+        }
+
+        updateState() {
+            // Short-circuit for states we can't move out of ourselves
+            if (!this.needsUpdate) return;
+            if (AdvTriggerNonUpdateStates.includes(this.state)) {
+                this.needsUpdate = false;
+                return;
+            }
+
+            // Main state machine
+            let transitioned = false;
+            let everTransitioned = false;
+            let transition = (st) => {this.state = st; transitioned = true; everTransitioned = true;};
+            do {
+                transitioned = false;
+                switch (this.state) {
+                    case AdvTriggerState.Default:
+                        // Default exists to try to auto-recover state.
+                        if (!this.parent.enabled) {
+                            transition(AdvTriggerState.FolderDisabled);
+                            break;
+                        }
+                        if (!this.cfg.enabled) {
+                            transition(AdvTriggerState.TriggerDisabled);
+                            break;
+                        }
+
+                        if (this.requirementIsComplete()) {
+                            if (this.actionIsComplete()) {
+                                transition(AdvTriggerState.Complete);
+                            }
+                            else {
+                                // TODO: Action impossible check goes here
+                                transition(AdvTriggerState.WaitActionAvailable);
+                            }
+                        }
+                        else {
+                            transition(AdvTriggerState.WaitBaseCondition);
+                        }
+                        break;
+
+                    case AdvTriggerState.WaitBaseCondition:
+                        if (this.baseConditionMet()) {
+                            transition(AdvTriggerState.WaitActionAvailable);
+                        }
+                        break;
+
+                    case AdvTriggerState.WaitActionAvailable:
+                        if (this.actionAvailable()) {
+                            transition(AdvTriggerState.WaitOverrides);
+                        }
+                        break;
+
+                    case AdvTriggerState.WaitOverrides:
+                        // For the purpose of chain triggers, we need to move to complete once the requirement
+                        // *and* the action are met, even if the user's conditions never let us trigger.
+                        // This should keep behavior consistent when buildings are built "by accident"
+                        // and on page reloads/trigger refreshes.
+                        if (this.actionIsComplete()) {
+                            transition(AdvTriggerState.Complete);
+                            break;
+                        }
+
+                        // If the user didn't specify any conditions, the default is "active".
+                        // If the user specifies at least one condition, the default is "wait".
+                        // This may seem a little unintuivie but it makes it much easier to write triggers.
+                        let overrideResult = "active";
+                        if (this.cfg.stateOverride && this.cfg.stateOverride.length) {
+                            overrideResult = evaluateOverride(this.cfg.stateOverride, this.name, "string");
+                            if (overrideResult === OVERRIDE_NO_VALUE) {
+                                overrideResult = "wait";
+                            }
+                        }
+
+                        switch(overrideResult) {
+                            case "wait":
+                                // User asked us to stay in WaitOverrides state. Explicit no-op.
+                                break;
+
+                            case "active":
+                                // User asked us to activate.
+                                transition(AdvTriggerState.Active);
+                                break;
+
+                            case "irrelevant":
+                                // User asked us to mark as irrelevant (early completion).
+                                transition(AdvTriggerState.Irrelevant);
+                                break;
+
+                            default:
+                                // ???
+                                throw `${displayName} state override returned invalid state '${overrideResult}'`;
+                        }
+                        break;
+
+                    case AdvTriggerState.Active:
+                        if (this.actionIsComplete()) {
+                            transition(AdvTriggerState.Complete);
+                            break;
+                        }
+                        break;
+                }
+            } while(transitioned);
+
+            if (everTransitioned) {
+                this.renderStatus();
+                this.parent.notifyTriggerStateChange(this);
+                this.needsUpdate = AdvTriggerNonUpdateStates.includes(this.state);
+            }
+        }
+
+        /* Call when .cfg is changed */
+        notifyCfgChanged() {
+            this.state = AdvTriggerState.Default;
+            this.needsUpdate = true;
+        }
+
+        render() {
+            this.tr.innerHTML = `
+                <td class="advtrigger-sortable-dragger">::</td>
+                <td class="advtrigger-when-type">
+                <select>
+                </select>
+                </td>
+                <td class="advtrigger-requirement-id">
+                <input type="text" value="${this.cfg.requirementId}">
+                </td>
+                <td class="advtrigger-requirement-count">
+                <input type="number" value="${this.cfg.requirementCount}">
+                </td>
+                <td class="advtrigger-overrides">
+                <button class="advtrigger-overrides">(${this.cfg.stateOverride.length})</button>
+                </td>
+                <td class="advtrigger-action-type">
+                <select></select>
+                </td>
+                <td class="advtrigger-action-id">
+                <input type="text" value="${this.cfg.actionId}">
+                </td>
+                <td class="advtrigger-action-count">
+                <input type="number" value="${this.cfg.actionCount}">
+                </td>
+                <td class="advtrigger-status">Default</td>
+                <td class="advtrigger-buttons"><button class="advtrigger-advsettings">Set</button><button class="advtrigger-del">Del</button></td>
+            `;
+            this.rendered = true;
+            this.renderStatus();
+        }
+
+        renderStatus() {
+            if(!this.rendered) return;
+            this.tr.querySelector(".advtrigger-status").innerText = AdvTriggerStateNames[this.state] ?? "Unknown";
+        }
+    }
+
+    class AdvTriggerFolder {
+        /** @type {string} */
+        id;
+        /** @type {AdvTriggerFolder|null} Parent folder, if any */
+        parent = null;
+        /** @type {AdvTriggerFolder[]} All sub folders regardless of state */
+        subFolders = [];
+        /** @type {AdvTrigger[]} All sub triggers regardless of state */
+        subTriggers = [];
+
+        /** @type {boolean} Enabled state last time updateEnabledState ran. Based on conditions. */
+        enabled = false;
+        /** @type {AdvTrigger[]} Triggers in active state */
+        activeTriggers = [];
+
+        div = document.createElement("div");
+        rendered = false;
+
+        /**
+         * @typedef {Object} AdvTriggerFolderCfg
+         * @property {string} name
+         * @property {boolean} enabled
+         * @property {boolean} exclusive
+         * @property {Array} enabledOverride
+         * @property {AdvTriggerCfg[]} triggers
+         * @property {AdvTriggerFolderCfg[]} folders
+         */
+        /** @type {AdvTriggerFolderCfg} cfg */
+        cfg = {};
+
+        constructor(id, cfg) {
+            this.id = id;
+            this.cfg = Object.assign(this.defaultConfig(), cfg);
+            this.div.dataset.folderId = id;
+
+            this.importCfg();
+            this.render();
+        }
+
+        /** @returns {AdvTriggerFolderCfg} */
+        static defaultConfig() {
+            return {
+                name: "New Folder",
+                enabled: true,
+                exclusive: false,
+                enabledOverride: [],
+                triggers: [],
+                folders: []
+            };
+        }
+
+        importCfg() {
+            for (let subfolder of this.cfg.folders) {
+                this.subFolders.push(new AdvTriggerFolder(AdvTriggerManager.getUniqueId('advtrgfolder'), subfolder));
+            }
+            for (let trg of this.cfg.triggers) {
+                this.subTriggers.push(new AdvTrigger(AdvTriggerManager.getUniqueId(), this, trg));
+            }
+        }
+
+        _getEnabledState() {
+            let overrideResult = evaluateOverride(this.cfg.enabledOverride, `AdvTrigger Folder ${this.cfg.name}`, "boolean");
+            return typeof overrideResult === "boolean" ? overrideResult : this.cfg.enabled;
+        }
+        /** @returns {boolean} Whether the state *changed*. *Not* the new state! Grab state from .enabled. */
+        updateEnabledState() {
+            let newState = this._getEnabledState();
+            if (newState !== this.enabled) {
+                this.enabled = newState;
+                return true;
+            }
+            return false;
+        }
+
+        updateActiveTriggers() {
+            this.activeTriggers = [];
+            if (!this.enabled) {
+                return;
+            }
+
+            this.activeTriggers = this.subTriggers.filter(trg => {
+                trg.updateState();
+                return trg.state === AdvTriggerState.Active;
+            });
+        }
+
+        /**
+         * @param {AdvTrigger} trigger
+         * @returns {AdvTrigger|null}
+         */
+        chainTriggerFor(trigger) {
+            let idx = this.subTriggers.indexOf(trigger);
+            return this.subTriggers[idx - 1] || null;
+        }
+
+        /** @param {AdvTrigger} changedTrigger */
+        notifyTriggerStateChange(changedTrigger) {
+            // TODO: Caching active triggers
+        }
+
+        render() {
+            this.div.innerHTML = `
+                <table style="margin-left: 10px" class="trigger-folder-table">
+                    <caption style="caption-side: top">${this.cfg.name}</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">::</th>
+                            <th scope="col" colspan="3">When</th>
+                            <th scope="col">Req</th>
+                            <th scope="col" colspan="3">Action</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Setting</th>
+                        </tr>
+                    </thead>
+                    <tbody class="advtrigger-subfolders"></tbody>
+                    <tbody class="advtrigger-subfolder-add"></tbody>
+                    <tbody class="advtrigger-subtriggers"></tbody>
+                    <tbody class="advtrigger-subtrigger-add"></tbody>
+                </table>
+            `;
+            this.rendered = true;
+            this.renderFolders();
+            this.renderTriggers();
+            this.renderAddButtons();
+        }
+        renderFolders() {
+            let tbody = this.div.querySelector("tbody.advtrigger-subfolders");
+            for (let subfolder of this.subFolders) {
+                subfolder.render();
+                tbody.append(subfolder.div);
+            }
+        }
+        renderTriggers() {
+            let tbody = this.div.querySelector("tbody.advtrigger-subtriggers");
+            for (let trg of this.subTriggers) {
+                trg.render();
+                tbody.append(trg.div);
+            }
+        }
+        renderAddButtons() {
+            this.div.querySelector("tbody.advtrigger-subfolder-add").appendChild(
+                document.createElement("button")
+            );
+
+        }
+    }
+
+    /** @typedef {AdvTrigger|AdvTriggerFolder} AdvTriggerUIRenderable */
+    // This holds all AdvTrigger related UI code.
+    // It's a little messy because relying on the game's Vue will probably break as the game updates, and this really wants it.
+    class AdvTriggerUIElement {
+        /** @type {WeakMap<AdvTriggerUIRenderable, AdvTriggerUIElement>} */
+        static elementMap = new WeakMap();
+
+        /** @param {AdvTriggerUIRenderable} el */
+        static getForElement(el) {
+            if(this.elementMap[el]) {
+                return this.elementMap[el];
+            }
+
+            this.elementMap[el] = new AdvTriggerUIElement(el);
+            return this.elementMap[el];
+        }
+
+        /** @type {AdvTriggerUIRenderable} */
+        #obj;
+        /** @type {HTMLElement} */
+        elem;
+
+        /** @param {AdvTriggerUIRenderable} obj */
+        constructor(obj) {
+            this.#obj = obj;
+            this._initElem();
+        }
+
+        _initElem() {
+
+        }
+
+        // Fully renders the element.
+        fullRender() {
+
+        }
+
+        // Updates a minimal set of things.
+        fastRender() {
+
+        }
+
+    }
+
+    class AdvTriggerManager {
+        static #nextUniqueId = 1; // Used in HTML to give elements an unique ID for drag/drop. Not saved in settings.
+
+        /** @type {AdvTriggerFolder[]} */
+        static rootFolders = [];
+        /** @type {AdvTriggerFolder[]} Flattened active folder state. Includes subfolders. */
+        static activeFolders = [];
+        /** @type {AdvTriggerFolder|null} */
+        static currentExclusiveFolder = null;
+
+        static settingsDiv = document.createElement("div");
+
+        /** @type {AdvTrigger[]} Export. */
+        static activeHighPriorityTriggers = [];
+        /** @type {AdvTrigger[]} Export. */
+        static activeLowPriorityTriggers = [];
+
+        static getUniqueId(what) {
+            return `${what || 'advtrg'}-${this.#nextUniqueId++}`;
+        }
+
+        static updateFolders() {
+            // This will end up updating this.activeFolders and this.currentExclusiveFolder, but not triggers.
+
+            let exclusiveFolder = null;
+            let somethingChanged = false;
+
+            // need a shallow copy of this.rootFolders if no exclusive
+            let activeFolders = this.currentExclusiveFolder ? [this.currentExclusiveFolder] : this.rootFolders.slice();
+
+            /** @param {AdvTriggerFolder[]} folders */
+            let iterateFolderArray = (folders) => {
+                for (let folder of folders) {
+                    if (folder.updateEnabledState()) {
+                        somethingChanged = true;
+                    }
+
+                    if (folder.enabled) {
+                        activeFolders.push(folder);
+                        // If this folder is exclusive and this is the first time the loop runs, stop processing now.
+                        // We'll run the loop again from the start in a bit.
+                        if (folder.cfg.exclusive && !exclusiveFolder) {
+                            exclusiveFolder = folder;
+                            return;
+                        }
+                        else {
+                            iterateFolderArray(folder.subFolders);
+                        }
+                    }
+                }
+            };
+
+            // Are we currently in exclusive mode? If so, start at the exclusive folder, else the root folder.
+            if (this.currentExclusiveFolder) {
+                activeFolders = [this.currentExclusiveFolder];
+                iterateFolderArray(this.currentExclusiveFolder);
+            }
+            else {
+                activeFolders = [this.rootFolders];
+                iterateFolderArray(this.rootFolders);
+            }
+
+            if (somethingChanged) {
+                // Is there an exclusive folder now?
+                if (exclusiveFolder) {
+                    if (exclusiveFolder !== this.currentExclusiveFolder) {
+                        // Re-run the recursive algorithm again.
+                        // This time, we'll start from either the new exclusive folder, or the root if we just lost it.
+                        // This is a little inefficient but this shouldn't be happening often enough for it to matter.
+                        activeFolders = exclusiveFolder ? [exclusiveFolder] : this.rootFolders;
+                        iterateFolderArray(activeFolders);
+                        this.currentExclusiveFolder = exclusiveFolder;
+                    }
+                }
+                else {
+                    // No exclusive folder used.
+                    this.currentExclusiveFolder = null;
+                }
+
+                this.activeFolders = activeFolders;
+
+                return true;
+            }
+            else {
+                // Nothing changed.
+                return false;
+            }
+        }
+
+        static updateTriggers() {
+            this.activeHighPriorityTriggers = [];
+            this.activeLowPriorityTriggers = [];
+
+            let maxPriorityTriggers = [];
+            let currentBestPriority = 1;
+
+            this.activeFolders.forEach(folder => {
+                folder.updateActiveTriggers();
+
+                folder.activeTriggers.forEach(trg => {
+                    let prio = trg.priority;
+                    // -1 and 0 are special. We need cases for equal/lesser/higher priority.
+                    if (prio === -1) {
+                        // -1 prio triggers need to be added to high priority at the end, so we keep them apart.
+                        maxPriorityTriggers.push(trg);
+                    }
+                    else if (prio < currentBestPriority) {
+                        // This also handles prio 0 triggers as currentBestPriority starts at 1 and never goes down.
+                        this.activeLowPriorityTriggers.push(trg);
+                    }
+                    else if (prio === currentBestPriority) {
+                        this.activeHighPriorityTriggers.push(trg);
+                    }
+                    else if (prio > currentBestPriority) {
+                        this.activeLowPriorityTriggers.push(...this.activeHighPriorityTriggers);
+                        this.activeHighPriorityTriggers = [trg];
+                        currentBestPriority = prio;
+                    }
+                    else {
+                        throw `updateTriggers: unhandled priority case ${prio} ${currentBestPriority}`;
+                    }
+                });
+            });
+
+            this.activeHighPriorityTriggers.push(...maxPriorityTriggers);
+        }
+
+        static updateAll() {
+            this.updateFolders();
+            this.updateTriggers();
+        }
+
+        // Import settings from the user's store.
+        static importSettings() {
+            this.rootFolders = [];
+
+            this.activeFolders = [];
+            this.activeLowPriorityTriggers = [];
+            this.activeHighPriorityTriggers = [];
+            this.currentExclusiveFolder = null;
+
+            // TODO: Error checking
+            if (settingsRaw?.advTriggers?.rootFolders) {
+                for (let fldCfg of settingsRaw.advTriggers.rootFolders) {
+                    let folder = new AdvTriggerFolder(this.getUniqueId('advtrgroot'), fldCfg);
+                    this.rootFolders.push(folder);
+                }
+
+            }
+        }
+    };
 
     var WindowManager = {
         openedByScript: false,
@@ -6988,6 +7659,8 @@
             missionRequest: true,
             useDemanded: true,
             prioritizeTriggers: "savereq",
+            prioritizeAdvTriggerHigh: "savereq",
+            prioritizeAdvTriggerLow: "save",
             prioritizeQueue: "savereq",
             prioritizeUnify: "savereq",
             prioritizeOuterFleet: "ignore",
@@ -12526,6 +13199,7 @@
             let storageSuffient = true;
             for (let res in obj.cost) {
                 resources[res].maxCost = Math.max(obj.cost[res], resources[res].maxCost);
+
                 if (resources[res].maxQuantity < obj.cost[res] && !resources[res].hasStorage()) {
                     storageSuffient = false;
                 }
@@ -12582,6 +13256,12 @@
         // Active triggers
         if (settings.prioritizeTriggers.includes("req")) {
             prioritizedTasks.push(...state.triggerTargets);
+        }
+        if (settings.autoTrigger && settings.prioritizeAdvTriggerHigh.includes("req")) {
+            prioritizedTasks.push(...AdvTriggerManager.activeHighPriorityTriggers);
+        }
+        if (settings.autoTrigger && settings.prioritizeAdvTriggerLow.includes("req")) {
+            prioritizedTasks.push(...AdvTriggerManager.activeLowPriorityTriggers);
         }
         // Unlocked missions
         if (settings.missionRequest) {
@@ -12659,7 +13339,7 @@
         }
         // TODO: Prioritize missing consumptions of buildings
         // Force crafting Stanene when there's less than minute worths of consumption, or 5%
-        if (buildings.Alien1VitreloyPlant.count > 0 && resources.Stanene.currentQuantity < Math.min((buildings.Alien1VitreloyPlant.stateOnCount || 1) * 6000, resources.Stanene.maxQuantity * 0.05)) {
+        if (buildings.Alien1VitreloyPlant.count > 0 && resources.Stanene.currentQuantity < Math.min((buildings.Alien1VitreloyPlant.count || 1) * 6000, resources.Stanene.maxQuantity * 0.05)) {
             resources.Stanene.requestedQuantity = resources.Stanene.maxQuantity;
         }
     }
@@ -12716,6 +13396,25 @@
                     if (triggerSave) {
                         state.conflictTargets.push({name: obj.title, cause: "Trigger", cost: obj.cost});
                     }
+                }
+            }
+        }
+
+        // TODO: Make own toggle for this, and make save/req behavior configurable
+        if (settings.autoTrigger) {
+            AdvTriggerManager.updateAll();
+
+            for (let trg of AdvTriggerManager.activeHighPriorityTriggers) {
+                if (trg.actionTarget) {
+                    state.triggerTargets.push(trg.actionTarget);
+                    state.conflictTargets.push({ name: trg.actionTarget.title, cause: "AdvTrigger", cost: trg.actionTarget.cost });
+                }
+            }
+
+            for (let trg of AdvTriggerManager.activeLowPriorityTriggers) {
+                if (trg.actionTarget) {
+                    state.triggerTargets.push(trg.actionTarget);
+                    state.conflictTargets.push({ name: trg.actionTarget.title, cause: "AdvTrigger", cost: trg.actionTarget.cost });
                 }
             }
         }
@@ -13471,6 +14170,7 @@
         let xorList = [];
         for (let i = 0; i < override.length; i++) {
             let check = override[i];
+
             try {
                 if (!checkTypes[check.type1]) {
                     throw `${check.type1} variable not found`;
@@ -14192,6 +14892,7 @@
         buildPlanetSettings();
         buildTraitSettings();
         buildTriggerSettings();
+        buildAdvTriggerSettings();
         buildResearchSettings();
         buildWarSettings(scriptContentNode, "");
         buildHellSettings(scriptContentNode, "");
@@ -15215,6 +15916,8 @@
 
         addSettingsSelect(currentNode, "prioritizeQueue", "Queue", "Alter script behaviour to speed up queued items, prioritizing missing resources.", priority);
         addSettingsSelect(currentNode, "prioritizeTriggers", "Triggers", "Alter script behaviour to speed up triggers, prioritizing missing resources.", priority);
+        addSettingsSelect(currentNode, "prioritizeAdvTriggerHigh", "AdvTriggers (high priority)", "Alter script behaviour to speed up AdvTriggers with the current highest active or -1 priority.", priority);
+        addSettingsSelect(currentNode, "prioritizeAdvTriggerLow", "AdvTriggers (low priority)", "Alter script behaviour to speed up AdvTriggers with non-highest or 0 priority.", priority);
         addSettingsSelect(currentNode, "prioritizeUnify", "Unification", "Alter script behaviour to speed up unification, prioritizing money required to purchase foreign cities.", priority);
         addSettingsSelect(currentNode, "prioritizeOuterFleet", "Ship Yard Blueprint (The True Path)", "Alter script behaviour to assist fleet building, prioritizing resources required for current design of ship.", priority);
 
@@ -15988,6 +16691,20 @@
         });
 
         return textBox;
+    }
+
+    function buildAdvTriggerSettings() {
+        // Main bulk of the UI logic is in AdvTriggerManager.
+        // This is just a placeholder to add it into settings.
+        let sectionId = "advTrigger";
+        let sectionName = "Advanced Trigger";
+
+        let updateFunction = () => {
+            let currentNode = $('#script_advTriggerContent');
+            currentNode.replaceChildren(AdvTriggerManager.div);
+        };
+
+        buildSettingsSection(sectionId, sectionName, () => { }, updateTriggerSettingsContent);
     }
 
     function buildActiveTargetsUI() {
@@ -19025,6 +19742,7 @@
             resources,
             crafter,
             projects,
+            AdvTriggerManager,
         };
 
         if (typeof unsafeWindow !== 'undefined') {

@@ -10259,7 +10259,7 @@
             maxAllowedSteel = totalSmelters - smelterIridiumCount;
         }
 
-        // Steel and Iron share a part of maxAllowedSteel.
+        // Steel and Iridium share a part of maxAllowedSteel.
         let smeltersToSplit = totalSmelters - smelterIridiumCount;
         let baseSteelRatio = ironWeighting > 0 ? steelWeighting / ironWeighting : 1;
 
@@ -10271,10 +10271,10 @@
 
         // CONFIGURABLES
         let maxSteelRatio = totalSmelters < 10 ? 1.0 : 0.9; // At 0.9, max 90% of non-Iridium smelters can be Steel (10% Iron rounded up)
-        let minIron = totalSmelters < 10 ? 0 : 2;
-        let maxIron = 10;
+        let minIron = Math.min(2, Math.floor(totalSmelters / 10));
+        let maxIron = Math.max(10, ironWeighting > steelWeighting ? Math.floor(totalSmelters / 3) : 0);
 
-        if(allowIronSmelting && allowSteelSmelting) {
+        if (allowIronSmelting && allowSteelSmelting) {
             // Split to ratio...
             let usedSteelRatio = baseSteelRatio < maxSteelRatio ? baseSteelRatio : maxSteelRatio;
             newWantedIronCount = Math.ceil((1-usedSteelRatio) * smeltersToSplit);

@@ -2132,6 +2132,9 @@
         tooltips: {},
         filterRegExp: null,
         evolutionTarget: null,
+
+        whiteholeLastStabilise: 0,
+        whiteholeLastExoticMass: 0,
     };
 
     // Class instances
@@ -8335,6 +8338,7 @@
             supplyMode: "mixed",
             naniteMode: "full",
             prestigeWhiteholeStabiliseMass: true,
+            prestigeWhiteholeStabiliseCooldown: 120,
         }
 
         for (let resource of EjectManager.priorityList) {
@@ -11521,6 +11525,12 @@
             if (settings.prestigeType === "whitehole") {
                 return "Disabled during whilehole reset";
             }
+            if (settings.prestigeWhiteholeStabiliseCooldown > 0 && state.whiteholeLastStabilise) {
+                let diff = (Date.now() - state.whiteholeLastStabilise) / 1000;
+                if (diff < settings.prestigeWhiteholeStabiliseCooldown) {
+                    return `On cooldown for ${Math.ceil(settings.prestigeWhiteholeStabiliseCooldown - diff)} more seconds`;
+                }
+            }
         }
 
         if (itemId !== settings.userResearchTheology_1 && (itemId === "tech-anthropology" || itemId === "tech-fanaticism")) {
@@ -13784,6 +13794,12 @@
 
         buildings.GateEastTower.gameMax = towerSize;
         buildings.GateWestTower.gameMax = towerSize;
+
+        // Check to see if user stabilized by detecting exotic mass going down
+        if ((game.global.interstellar?.stellar_engine?.exotic ?? 0) < state.whiteholeLastExoticMass) {
+            state.whiteholeLastStabilise = Date.now();
+        }
+        state.whiteholeLastExoticMass = game.global.interstellar?.stellar_engine?.exotic ?? 0;
 
         // Space dock is special and has a modal window with more buildings!
         if (!buildings.GasSpaceDock.isOptionsCached()) {
@@ -17221,6 +17237,7 @@
         addSettingsSelect(currentNode, "supplyMode", "Supply mode", spendDesc, spendOptions);
         addSettingsSelect(currentNode, "naniteMode", "Nanite mode", spendDesc, spendOptions);
         addSettingsToggle(currentNode, "prestigeWhiteholeStabiliseMass", "Stabilize blackhole", "Stabilizes the blackhole with exotic materials, disabled on whitehole runs");
+        addSettingsNumber(currentNode, "prestigeWhiteholeStabiliseCooldown", "Cooldown between stabilizes", "Waits this many seconds between stabilizes. Stabilizing too frequently may cause significant lag in late game due to frequent full page redraws. Set to 0 to disable cooldown.");
 
         currentNode.append(`
           <table style="width:100%">

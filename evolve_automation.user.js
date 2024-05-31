@@ -55,6 +55,7 @@
 
     var settingsRaw = JSON.parse(localStorage.getItem('settings')) ?? {};
     var settings = {};
+    var snippetData = {};
     var game = null;
     var win = null;
 
@@ -5936,6 +5937,116 @@
             return false;
         },
     }
+    
+    // Arbitrary code execution as a service.
+    class SnippetManager {
+        // Resource list for custom trigger storage requirements
+        static customResourceDemands = [];
+        // Current active normal ish triggers
+        static activeTriggers = [];
+
+        static #evalCache = {};
+        static #lastRunData = { overrides: {}, early: {}, late: {} };
+        static _triggersFor = { overrides: [], early: [], late: [] };
+        static _customDemandsFor = { overrides: [], early: [], late:[] };
+
+        static _showErrors = false;
+
+        static runSnippets(hookPoint) {
+            // Overrides hook: to make very fancy custom overrides before they're used
+            // Early hook: default, most appropriate for most things, can override some things
+            // Late hook: for custom functionality
+            if (!["overrides", "early", "late"].includes(hookPoint)) {
+                throw `Invalid hookPoint ${hookPoint}`;
+            }
+
+            this.#lastRunData[hookPoint] = {};
+            this._triggersFor[hookPoint] = [];
+            this._customDemandsFor[hookPoint] = [];
+
+            if (Array.isArray(settingsRaw.snippets) && settingsRaw.snippets.length) {
+                let snippetsToRun = settingsRaw.snippets.filter(snip => snip.active === true && snip.hookPoint === hookPoint);
+                for (let snip of snippetsToRun) {
+                    let code = this.#makeEval(snip.code, snip.hookPoint, snip.title);
+
+                    try {
+                        let result = code();
+                        if (typeof result === "object") {
+                            Object.assign(this.#lastRunData[hookPoint], result);
+                        }
+                    }
+                    catch(e) {
+                        if (this._showErrors) {
+                            console.error("Snippet [%s] error: %o", snip.title, e);
+
+                            msg = `Snippet [${snip.title}] error: ${e}. See the browser console for more information.`;
+                            GameLog.logDanger("special", msg, ['events', 'major_events']);
+
+                            this._showErrors = false;
+                            setTimeout(() => { SnippetManager._showErrors = true; }, 5000);
+                        }
+                    }
+                }
+            }
+
+            // Update global data
+            snippetData = Object.assign({}, this.#lastRunData.overrides, this.#lastRunData.early, this.#lastRunData.late);
+            this.customResourceDemands = [...this._customDemandsFor.overrides, ...this._customDemandsFor.early, ...this._customDemandsFor.late];
+            this.activeTriggers = [...this._triggersFor.overrides, ...this._triggersFor.early, ...this._triggersFor.late];
+        }
+
+        static cleanCache() {
+            this.#evalCache = {};
+        }
+
+        static checkSyntax(functionCode) {
+            // Without the cache
+            try {
+                eval(`(function() { \n${functionCode}\n })`);
+            }
+            catch(e) {
+                return e;
+            }
+            return true;
+        }
+
+        // Similar to fastEval, but code runs in a slightly different environment.
+        // We pass some arguments to the function to add extra callables.
+        static #makeEval(functionCode, hookPoint, functionTitle) {
+            const key = hookPoint + functionCode;
+            if (this.#evalCache[key]) {
+                return this.#evalCache[key];
+            }
+            //let once = (onceCode) => { let result = onceCode(); once = () => result; return result; }
+            // This needs to be called to get the actual cached function.
+            let executable = `(function(trigger, ui) {
+                return (function() { ui.keepAlive(); \n${functionCode}\n });
+            })`;
+            return this.#evalCache[key] = (eval(executable)).apply(null, [
+                this.#makeTriggerFn(hookPoint, functionTitle),
+                this.#makeUi(key, functionTitle),
+            ]);
+        }
+
+        static #makeTriggerFn(hookPoint, functionTitle) {
+            return (triggerable) => {
+                if (triggerable instanceof Action || triggerable instanceof Technology || triggerable instanceof Project || triggerable instanceof ResourceAction) {
+                    SnippetManager._triggersFor[hookPoint].push(triggerable);
+                }
+                else if (typeof triggerable === "object") {
+                    // Custom resource list
+                    SnippetManager._customDemandsFor[hookPoint].push({name: functionTitle, cause: "Snippet", cost: triggerable});
+                }
+            };
+        }
+
+        static #makeUi(key, functionTitle) {
+            // TODO: This whole thing
+            return {
+                keepAlive: () => {},
+            };
+        }
+    }
 
     var WindowManager = {
         openedByScript: false,
@@ -7684,6 +7795,19 @@
         applySettings(def, reset);
     }
 
+    function resetSnippetSettings(reset) {
+        let def = {
+            autoSnippet: false,
+        };
+
+        // We never delete user snippets. Too easy to cause massive data loss. Only reset if it's invalid.
+        if (!settingsRaw.snippets || !Array.isArray(settingsRaw.snippets)) {
+            settingsRaw.snippets = [];
+        }
+
+        applySettings(def, reset);
+    }
+
     function updateStateFromSettings() {
         TriggerManager.priorityList = [];
         settingsRaw.triggers.forEach(trigger => TriggerManager.AddTriggerFromSetting(trigger));
@@ -7764,6 +7888,7 @@
         resetTriggerSettings(false);
         resetMinorTraitSettings(false);
         resetMutableTraitSettings(false);
+        resetSnippetSettings(false);
 
         // Validate overrides types, and fix if needed
         for (let key in settingsRaw.overrides) {
@@ -11630,6 +11755,9 @@
         if (settings.storageAssignPart) {
             addList([{cost: resRequired, isList: true}]);
         }
+        if (settings.autoSnippet) {
+            addList(SnippetManager.customResourceDemands);
+        }
 
         let storageToBuild = 0;
         // Calculate required storages
@@ -12595,6 +12723,10 @@
         if (settings.prioritizeTriggers.includes("req")) {
             prioritizedTasks.push(...state.triggerTargets);
         }
+        // Main snippet tasks are covered by triggerTargets, but custom isn't
+        if (settings.autoSnippet) {
+            prioritizedTasks.push(...SnippetManager.customResourceDemands);
+        }
         // Unlocked missions
         if (settings.missionRequest) {
             for (let i = state.missionBuildingList.length - 1; i >= 0; i--) {
@@ -12727,6 +12859,17 @@
                         state.conflictTargets.push({name: obj.title, cause: "Trigger", cost: obj.cost});
                     }
                 }
+            }
+        }
+
+        if (settings.autoSnippet) {
+            // This is kind of interwoven with real triggers, so we re-use the same setting
+            let triggerSave = settings.prioritizeTriggers.includes("save");
+            state.triggerTargets.push(...SnippetManager.activeTriggers);
+            if (triggerSave) {
+                state.conflictTargets.push(SnippetManager.activeTriggers.map(trg => {
+                    return {name: "Snippet", cause: "Snippet", cost: trg.cost};
+                }));
             }
         }
 
@@ -13113,7 +13256,8 @@
             const triggersList = state.triggerTargets,
                 buildingsList = [],
                 researchList = [],
-                arpaList = [];
+                arpaList = [],
+                snippetsList = settings.autoSnippet ? [...SnippetManager.activeTriggers, ...SnippetManager.customResourceDemands] : [];
 
             queuedTargets.forEach(target => {
                 if (target instanceof Technology) {
@@ -13129,6 +13273,7 @@
             updateActiveTargetsUI(buildingsList, 'buildings');
             updateActiveTargetsUI(researchList, 'research');
             updateActiveTargetsUI(arpaList, 'arpa');
+            updateActiveTargetsUI(snippetsList, 'snippets');
 
             // remove from queue by clicking 
             $(".active-target-remove-x").click(function() {
@@ -13602,6 +13747,10 @@
 
         updateScriptData(); // Sync exposed data with script variables
         updateOverrides();  // Apply settings overrides as soon as possible
+        // Let user change overrides in very early snippets, needs to run before we make use of them
+        if (settings.masterScriptToggle && settings.autoSnippet) {
+            SnippetManager.runSnippets("overrides");
+        }
         finalizeScriptData(); // Second part of updating data, applying settings
 
         // Redraw tabs once they unlocked
@@ -13617,6 +13766,11 @@
         // The user has turned off the master toggle. Stop taking any actions on behalf of the player.
         // We've still updated the UI etc. above; just not performing any actions.
         if (!settings.masterScriptToggle) { return; }
+
+        // Let user change overrides in very early snippets
+        if (settings.autoSnippet) {
+            SnippetManager.runSnippets("early");
+        }
 
         if (state.goal === "Evolution") {
             if (settings.autoEvolution) {
@@ -13736,6 +13890,10 @@
         }
         if (settings.autoMutateTraits) {
             autoMutateTrait();
+        }
+
+        if (settings.autoSnippet) {
+            SnippetManager.runSnippets("late");
         }
 
         KeyManager.finish();
@@ -14170,6 +14328,10 @@
                 line-height: 1rem;
             }
 
+            .active-target-remove-x.snippets {
+                display: none;
+            }
+
             .active-target-remove-x:hover {
                 opacity: 1;
                 font-size: 1.2rem;
@@ -14222,6 +14384,7 @@
         buildBuildingSettings();
         buildWeightingSettings();
         buildProjectSettings();
+        buildSnippetSettings();
         buildLoggingSettings(scriptContentNode, "");
 
         let collapsibles = document.querySelectorAll("#script_settings .script-collapsible");
@@ -16027,6 +16190,10 @@
                         <div class="target-type-box arpa" style="display: none;">
                             <h2>A.R.P.A.</h2>
                             <ul class="active_targets-list arpa"></ul>
+                        </div>
+                        <div class="target-type-box snippets" style="display: none;">
+                            <h2>Snippets</h2>
+                            <ul class="active_targets-list snippets"></ul>
                         </div>
                     </div>
                 </div>`);
@@ -18023,6 +18190,119 @@
         document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;
     }
 
+
+    function buildSnippetSettings() {
+        let sectionId = "snippet";
+        let sectionName = "Snippet";
+
+        let resetFunction = function() {
+            resetSnippetSettings(true);
+            updateSettingsFromState();
+            updateSnippetSettingsContent();
+
+            resetCheckbox("autoSnippet");
+        };
+
+        buildSettingsSection(sectionId, sectionName, resetFunction, updateSnippetSettingsContent);
+    }
+
+    function updateSnippetSettingsContent() {
+        let currentScrollPosition = document.documentElement.scrollTop || document.body.scrollTop;
+
+        const cleaner = () => {
+            SnippetManager.cleanCache();
+            updateSnippetSettingsContent();
+            updateSettingsFromState();
+        };
+
+        let currentNode = $('#script_snippetContent');
+        currentNode.empty().off("*");
+
+        currentNode.append('<div style="margin-top: 10px;"><button id="script_snippet_add" class="button">Add New Snippet</button></div>');
+
+        currentNode.append(`
+          <table style="width:100%">
+            <tr>
+              <th class="has-text-warning" style="width:10%">&nbsp;</th>
+              <th class="has-text-warning" style="width:60%">Title</th>
+              <th class="has-text-warning" style="width:30%">&nbsp;</th>
+            </tr>
+            <tbody id="script_snippetTableBody"></tbody>
+          </table>`);
+
+        let tableBodyNode = $('#script_snippetTableBody');
+        let newTableBodyText = "";
+
+        for (let i = 0; i < settingsRaw.snippets.length; i++) {
+            const snippet = settingsRaw.snippets[i];
+            newTableBodyText += `<tr data-idx="${i}" class="script-draggable"><td></td><td id="script_snippet_${i}">${snippet.title}</td><td class="buttons"><a class="edit-button button is-dark is-small">✎</button></td></tr>`;
+        }
+        tableBodyNode.append($(newTableBodyText));
+
+        tableBodyNode.on("click", ".edit-button", (e) => {
+            let idx = $(e.target).closest("tr")[0].dataset.idx;
+            if (!isNaN(parseInt(idx, 10))) {
+                idx = parseInt(idx, 10);
+                const snip = settingsRaw.snippets[idx];
+                // TODO: Make modal warn on misclick instead of losing snippet
+                openOptionsModal(snip.title, function (modal) {
+                    modal.append('<div style="margin-top: 10px;"><button id="script_snippet_modal_delete" class="button">Delete</button> <button id="script_snippet_modal_save" class="button">Save</button></div>');
+
+                    let titleElem = $(`<input type="text" name="title" style="width: 100%">`).val(snip.title);
+                    modal.append($('<div class="script-modal-snippet-title-holder" style="margin-top: 10px">').append(titleElem));
+
+                    let textareaElem = $(`<textarea style="width: 100%; height: 100%; font-family: monospace">`).val(snip.code);
+                    modal.append($('<div class="script-modal-snippet-editor-holder" style="margin-top: 10px; margin-bottom: 10px; height: 12em">').append(textareaElem));
+
+                    $("#script_snippet_modal_delete").on("click", (evt) => {
+                        settingsRaw.snippets.splice(idx, 1);
+                        $('#scriptModalClose').click();
+                        cleaner();
+                    });
+
+                    $("#script_snippet_modal_save").on("click", (evt) => {
+                        let e = SnippetManager.checkSyntax(textareaElem.val());
+                        if (e === true) {
+                            settingsRaw.snippets[idx].title = titleElem.val();
+                            settingsRaw.snippets[idx].code = textareaElem.val();
+                            settingsRaw.snippets[idx].hookPoint = "early";
+                            $('#scriptModalClose').click();
+                            cleaner();
+                        }
+                        else {
+                            // Invalid
+                        }
+                    });
+                });
+            }
+        });
+
+        // TODO: Put documentation or something.
+        const exampleScript = ``;
+
+        $("#script_snippet_add").on("click", (e) => {
+            settingsRaw.snippets.push({title: "New Snippet", code: exampleScript, hookPoint: "early", active: true});
+            cleaner();
+        });
+
+        tableBodyNode.sortable({
+            items: "tr:not(.unsortable)",
+            helper: sorterHelper,
+            update: function () {
+                let newOrder = tableBodyNode.sortable('toArray', { attribute: 'data-idx' });
+                let newArray = [];
+                for (let i = 0; i < newOrder.length; i++) {
+                    newArray[i] = settingsRaw.snippets[newOrder[i]];
+                }
+                settingsRaw.snippets = newArray;
+
+                cleaner();
+            },
+        });
+
+        document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;
+    }
+
     function buildLoggingSettings(parentNode, secondaryPrefix) {
         let sectionId = "logging";
         let sectionName = "Logging";
@@ -18317,6 +18597,7 @@
             createSettingToggle(togglesNode, 'autoSupply', 'Send excess resources to Spire. Normal resources sent when they close to storage cap, craftables - when above requirements. Takes priority over ejector.', createSupplyToggles, removeSupplyToggles);
             createSettingToggle(togglesNode, 'autoNanite', 'Consume resources to produce Nanite. Normal resources sent when they close to storage cap, craftables - when above requirements. Takes priority over supplies and ejector.');
             createSettingToggle(togglesNode, 'autoReplicator', 'Use excess power to replicate resources.');
+            createSettingToggle(togglesNode, 'autoSnippet', 'Runs pieces of user-provided code for advanced customizations.');
 
             createQuickOptions(togglesNode, "s-quick-prestige-options", "Prestige", buildPrestigeSettings);
 
@@ -19042,6 +19323,7 @@
             resources,
             crafter,
             projects,
+            SnippetManager,
         };
 
         if (typeof unsafeWindow !== 'undefined') {

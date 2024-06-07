@@ -5940,34 +5940,56 @@
     
     // Arbitrary code execution as a service.
     class SnippetManager {
+        // Root for the main bit in settings. This needs to be made very early.
+        static settingsUIRoot = document.createElement("div");
+
         // Resource list for custom trigger storage requirements
         static customResourceDemands = [];
         // Current active normal ish triggers
         static activeTriggers = [];
 
         static #evalCache = {};
-        static #lastRunData = { overrides: {}, early: {}, late: {} };
-        static _triggersFor = { overrides: [], early: [], late: [] };
-        static _customDemandsFor = { overrides: [], early: [], late:[] };
+        static #stateObjects = {};
+        static #lastRunData = { early: {}, late: {} };
+        static _triggersFor = { early: [], late: [] };
+        static _customDemandsFor = { early: [], late: [] };
+        static _overridesFor = { early: {}, late: {} };
 
-        static _showErrors = false;
+        // Key is snippet ID.
+        static _snippetUiDef = {};
+        static _snippetUiRedraw = true;
+
+        static _showErrors = true;
+
+        // Early hook: default, most appropriate for most things, can override some things, but runs before things like autoBuild weights are set
+        // Late hook: for custom functionality
+        static knownHookPoints = ["early", "late"];
 
         static runSnippets(hookPoint) {
-            // Overrides hook: to make very fancy custom overrides before they're used
-            // Early hook: default, most appropriate for most things, can override some things
-            // Late hook: for custom functionality
-            if (!["overrides", "early", "late"].includes(hookPoint)) {
+            if (!this.knownHookPoints.includes(hookPoint)) {
                 throw `Invalid hookPoint ${hookPoint}`;
             }
 
+            // Reset data associated with this hookPoint
             this.#lastRunData[hookPoint] = {};
             this._triggersFor[hookPoint] = [];
             this._customDemandsFor[hookPoint] = [];
+            this._overridesFor[hookPoint] = {};
+            // UI hook only runs in late. This covers early too.
+            if (hookPoint === "late") {
+                this._snippetUiDef = Object.fromEntries(
+                    Object.entries(this._snippetUiDef).filter(([k, v]) => {
+                        if (!v.alive) { this._snippetUiRedraw = true; return false; }
+                        v.alive = false;
+                        return true;
+                    })
+                );
+            }
 
             if (Array.isArray(settingsRaw.snippets) && settingsRaw.snippets.length) {
                 let snippetsToRun = settingsRaw.snippets.filter(snip => snip.active === true && snip.hookPoint === hookPoint);
                 for (let snip of snippetsToRun) {
-                    let code = this.#makeEval(snip.code, snip.hookPoint, snip.title);
+                    let code = this.#makeEval(snip);
 
                     try {
                         let result = code();
@@ -5976,10 +5998,9 @@
                         }
                     }
                     catch(e) {
+                        console.error("Snippet [%s] error: %o", snip.title, e);
                         if (this._showErrors) {
-                            console.error("Snippet [%s] error: %o", snip.title, e);
-
-                            msg = `Snippet [${snip.title}] error: ${e}. See the browser console for more information.`;
+                            let msg = `Snippet [${snip.title}] error: ${e}. See the browser console for more information.`;
                             GameLog.logDanger("special", msg, ['events', 'major_events']);
 
                             this._showErrors = false;
@@ -5990,9 +6011,34 @@
             }
 
             // Update global data
-            snippetData = Object.assign({}, this.#lastRunData.overrides, this.#lastRunData.early, this.#lastRunData.late);
-            this.customResourceDemands = [...this._customDemandsFor.overrides, ...this._customDemandsFor.early, ...this._customDemandsFor.late];
-            this.activeTriggers = [...this._triggersFor.overrides, ...this._triggersFor.early, ...this._triggersFor.late];
+            snippetData = Object.assign({}, this.#lastRunData.early, this.#lastRunData.late);
+            this.customResourceDemands = [...this._customDemandsFor.early, ...this._customDemandsFor.late];
+            this.activeTriggers = [...this._triggersFor.early, ...this._triggersFor.late];
+
+            if (this._snippetUiRedraw) {
+                this.redrawSnippetUI();
+            }
+        }
+
+        static prepSnippets() {
+            settingsRaw.snippets = settingsRaw.snippets.map(snip => {
+                snip.id = snip.id ?? this.randomId();
+                if (!Object.hasOwn(snip, 'active')) {
+                    snip.active = true;
+                }
+                return snip;
+            });
+
+            // Clean up snippet config for deleted snippets.
+            Object.keys(settingsRaw).forEach(sk => {
+                if (sk.startsWith("snippetCfg_")) {
+                    let match = sk.match(/^snippetCfg_([^_]+)_/);
+                    if (match && !settingsRaw.snippets.some(snip => snip.id === match[1])) {
+                        delete settingsRaw[sk];
+                        delete settings[sk];
+                    }
+                }
+            });
         }
 
         static cleanCache() {
@@ -6000,7 +6046,7 @@
         }
 
         static checkSyntax(functionCode) {
-            // Without the cache
+            // Simple eval check without the cache
             try {
                 eval(`(function() { \n${functionCode}\n })`);
             }
@@ -6010,41 +6056,193 @@
             return true;
         }
 
-        // Similar to fastEval, but code runs in a slightly different environment.
-        // We pass some arguments to the function to add extra callables.
-        static #makeEval(functionCode, hookPoint, functionTitle) {
-            const key = hookPoint + functionCode;
-            if (this.#evalCache[key]) {
-                return this.#evalCache[key];
-            }
-            //let once = (onceCode) => { let result = onceCode(); once = () => result; return result; }
-            // This needs to be called to get the actual cached function.
-            let executable = `(function(trigger, ui) {
-                return (function() { ui.keepAlive(); \n${functionCode}\n });
-            })`;
-            return this.#evalCache[key] = (eval(executable)).apply(null, [
-                this.#makeTriggerFn(hookPoint, functionTitle),
-                this.#makeUi(key, functionTitle),
-            ]);
+        static randomId() {
+            // These IDs are exposed to the user in the override screen, and should be shorter than an UUID
+            // (also some people self-host on a not-secure origin so we can't use crypto.randomUUID)
+            return 'a'.repeat(8).replace(/a/g, (m) => Math.floor(Math.random() * 36).toString(36));
         }
 
-        static #makeTriggerFn(hookPoint, functionTitle) {
+        static updateOverridesAndUi() {
+            for (let hp of this.knownHookPoints) {
+                Object.entries(this._overridesFor[hp]).forEach(([k, v]) => {
+                    settings[k] = v;
+                });
+            }
+        }
+
+        static redrawSnippetUI() {
+            let currentScrollPosition = document.documentElement.scrollTop || document.body.scrollTop;
+
+            // We're doing it now
+            this._snippetUiRedraw = false;
+
+            let snippetsWithUi = settingsRaw.snippets.filter(snip => {
+                return !!(this._snippetUiDef[snip.id]);
+            });
+            // Wipe contents first
+            this.settingsUIRoot.replaceChildren();
+            // Render snippets in order specified in source
+            for (let snip of snippetsWithUi) {
+                let ui = this._snippetUiDef[snip.id];
+                let snipRoot = $("<div>").appendTo(this.settingsUIRoot); // needs to be jquery
+
+                addSettingsHeader1(snipRoot, snip.title);
+                for (let uiElement of ui.elements) {
+                    switch (uiElement.type) {
+                        case "string":
+                            addSettingsString(snipRoot, uiElement.settingKey, uiElement.label, uiElement.hint ?? "");
+                            break;
+                        case "number":
+                            addSettingsNumber(snipRoot, uiElement.settingKey, uiElement.label, uiElement.hint ?? "");
+                            break;
+                        case "toggle":
+                            addSettingsToggle(snipRoot, uiElement.settingKey, uiElement.label, uiElement.hint ?? "");
+                            break;
+                        case "button":
+                            // TODO
+                            //add(snipRoot, uiElement.settingKey, uiElement.label, uiElement.hint ?? "");
+                            break;
+                        default: throw `Unexpected type ${uiElement.type}`;
+                    }
+                }
+            }
+
+            document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;
+        }
+
+        // Similar to fastEval, but the code runs in a different, snippet-specific environment.
+        // We pass some arguments to the function to add extra callables.
+        // Extra functions:
+        // * code can call once() with a function. The function will run once, and then the results will be "cached".
+        //
+        static #makeEval(snip) {
+            const snippetKey = snip.id;
+            if (this.#evalCache[snippetKey]) {
+                return this.#evalCache[snippetKey];
+            }
+            // This needs to be called to get the actual cached function.
+            // This mess exists to provide a better function name in the browser console if something goes wrong.
+            // Some things online say defining Function.name should work but it doesn't seem to...
+            let fnName = `[Snippet] ${snip.title}`;
+            let executable = `(function(trigger, ui, settings, snippetState) {
+                let once = (onceCode) => { let result = onceCode(); once = () => result; return result; }
+                return {[fnName]() { return ui.wrap(() => { \n${snip.code}\n });}};
+            })`;
+            let fn = ((eval(executable)).apply(null, [
+                this.#makeTriggerFn(snip),
+                this.#makeUi(snip),
+                this.#makeSettingsProxy(snip),
+                this.#getSnippetStateObject(snip),
+            ]))[fnName];
+            this.#evalCache[snippetKey] = fn;
+            return fn;
+        }
+
+        static #makeTriggerFn(snip) {
             return (triggerable) => {
                 if (triggerable instanceof Action || triggerable instanceof Technology || triggerable instanceof Project || triggerable instanceof ResourceAction) {
-                    SnippetManager._triggersFor[hookPoint].push(triggerable);
+                    SnippetManager._triggersFor[snip.hookPoint].push(triggerable);
                 }
                 else if (typeof triggerable === "object") {
                     // Custom resource list
-                    SnippetManager._customDemandsFor[hookPoint].push({name: functionTitle, cause: "Snippet", cost: triggerable});
+                    SnippetManager._customDemandsFor[snip.hookPoint].push({name: snip.title, cause: "Snippet", cost: triggerable});
                 }
             };
         }
 
-        static #makeUi(key, functionTitle) {
-            // TODO: This whole thing
-            return {
-                keepAlive: () => {},
+        static #makeUi(snip) {
+            let lastUiHash = "";
+            let curUiHash = "";
+            let uiArr = [];
+            const settingForKey = (configKey) => `snippetCfg_${snip.id}_${configKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+            const addArr = (hashedParts, unhashedParts) => {
+                curUiHash += Object.entries(hashedParts).reduce((acc, [key, val]) => {return acc + key + val;}, "");
+                uiArr.push(unhashedParts ? Object.assign(hashedParts, unhashedParts) : hashedParts);
             };
+            return {
+                wrap: (snippetFn) => {
+                    curUiHash = "";
+                    uiArr = [];
+                    let retVal = snippetFn();
+                    if (lastUiHash !== curUiHash) {
+                        if (curUiHash !== "") {
+                            SnippetManager._snippetUiDef[snip.id] = {
+                                alive: true,
+                                elements: uiArr,
+                            };
+                            SnippetManager._snippetUiRedraw = true;
+                        }
+                        // Else case when we deleted all UI options: alive left at false, will be collected next cycle.
+                    }
+                    else if (lastUiHash !== "") {
+                        SnippetManager._snippetUiDef[snip.id].alive = true;
+                    }
+                    lastUiHash = curUiHash;
+                    return retVal;
+                },
+                toggle: (key, label, defValue, hint) => {
+                    // Displays an on-off toggle with a label.
+                    let settingKey = settingForKey(key);
+                    addArr({ type: "toggle", settingKey, label, hint });
+                    if (typeof settingsRaw[settingKey] !== "boolean") {
+                        settingsRaw[settingKey] = Object.hasOwn(settingsRaw, settingKey) ? !!settingsRaw[settingKey] : defValue;
+                    }
+                    return settings[settingKey] ? !!settings[settingKey] : defValue;
+                },
+                string: (key, label, defValue, hint) => {
+                    // Displays a textbox with a label.
+                    let settingKey = settingForKey(key);
+                    addArr({ type: "string", settingKey, label, hint });
+                    if (typeof settingsRaw[settingKey] !== "string") {
+                        settingsRaw[settingKey] = Object.hasOwn(settingsRaw, settingKey) ? String(settingsRaw[settingKey]) : defValue;
+                    }
+                    return settings[settingKey] ? String(settings[settingKey]) : defValue;
+                },
+                number: (key, label, defValue, hint) => {
+                    // Displays a textbox with a label, expecting a number.
+                    let settingKey = settingForKey(key);
+                    addArr({ type: "number", settingKey, label, hint });
+                    if (typeof settingsRaw[settingKey] !== "number") {
+                        settingsRaw[settingKey] = Object.hasOwn(settingsRaw, settingKey) ? parseInt(settingsRaw[settingKey], 10) : defValue;
+                    }
+                    return settings[settingKey] ? parseInt(settings[settingKey], 10) : defValue;
+                },
+                button: (key, label, hint) => {
+                    // Like a toggle. Returns true for *one* tick when pressed.
+                    let settingKey = settingForKey(key);
+                    addArr({ type: "button", settingKey, label, hint });
+                    // Can be triggered with overrides, if so, it's the user responsibility to do it correctly. delete may be a no-op.
+                    if (settings[settingForKey(key)]) {
+                        delete settingsRaw[settingForKey(key)];
+                        return true;
+                    }
+                    return false;
+                },
+            };
+        }
+
+        static #makeSettingsProxy(snip) {
+            return new Proxy(settings, {
+                // Will apply during next overrides phase for 1 tick.
+                set(trg, settingKey, newValue) {
+                    // Apply during current tick (not very useful if we're running late)
+                    trg[settingKey] = newValue;
+
+                    // Apply during next tick
+                    SnippetManager._overridesFor[snip.hook][settingKey] = newValue;
+
+                    // TODO: Conflict handling?
+                }
+            });
+        }
+
+        // Place for snippets to store internal non-persisted state. Every call gets the same object.
+        static #getSnippetStateObject(snip) {
+            if (!this.#stateObjects[snip.id]) {
+                this.#stateObjects[snip.id] = {};
+            }
+
+            return this.#stateObjects[snip.id];
         }
     }
 
@@ -13749,7 +13947,7 @@
         updateOverrides();  // Apply settings overrides as soon as possible
         // Let user change overrides in very early snippets, needs to run before we make use of them
         if (settings.masterScriptToggle && settings.autoSnippet) {
-            SnippetManager.runSnippets("overrides");
+            SnippetManager?.updateOverridesAndUi();
         }
         finalizeScriptData(); // Second part of updating data, applying settings
 
@@ -13971,6 +14169,7 @@
         initialiseRaces();
         initialiseScript();
         updateOverrides();
+        SnippetManager.prepSnippets();
 
         // Hook to game loop, to allow script run at full speed in unfocused tab
         const setCallback = (fn) => (typeof unsafeWindow !== "object" || typeof exportFunction !== "function") ? fn : exportFunction(fn, unsafeWindow);
@@ -18270,7 +18469,8 @@
                             cleaner();
                         }
                         else {
-                            // Invalid
+                            // TODO: show a more visible error of what's wrong.
+                            console.error("Invalid syntax! %o", e);
                         }
                     });
                 });
@@ -18300,6 +18500,11 @@
             },
         });
 
+        SnippetManager.redrawSnippetUI();
+        addSettingsHeader1(currentNode, "Custom Settings");
+        currentNode.append(SnippetManager.settingsUIRoot);
+
+        resetTabHeight("snippetSettings");
         document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;
     }
 

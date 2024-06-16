@@ -5949,7 +5949,7 @@
         static activeTriggers = [];
 
         static #evalCache = {};
-        static #stateObjects = {};
+        static #executionStopped = new Set();
         static #lastRunData = { early: {}, late: {} };
         static _triggersFor = { early: [], late: [] };
         static _customDemandsFor = { early: [], late: [] };
@@ -5989,6 +5989,10 @@
             if (Array.isArray(settingsRaw.snippets) && settingsRaw.snippets.length) {
                 let snippetsToRun = settingsRaw.snippets.filter(snip => snip.active === true && snip.hookPoint === hookPoint);
                 for (let snip of snippetsToRun) {
+                    if (this.#executionStopped.has(snip.id)) {
+                        continue;
+                    }
+
                     let code = this.#makeEval(snip);
 
                     try {
@@ -6043,6 +6047,19 @@
 
         static cleanCache() {
             this.#evalCache = {};
+            this.#executionStopped = new Set();
+        }
+
+        // Reset a single snippet. Used when updating the code.
+        static resetSnippet(snip) {
+            const snipId = snip.id;
+            // Deleting the eval cache will make new copies of many of its objects.
+            delete this.#evalCache[snipId];
+            // Undo stopRunning() effect
+            this.#executionStopped.delete(snipId);
+            // Delete UI and force redraw
+            delete this._snippetUiDef[snipId];
+            this._snippetUiRedraw = true;
         }
 
         static checkSyntax(functionCode) {
@@ -6121,19 +6138,23 @@
                 return this.#evalCache[snippetKey];
             }
             // This needs to be called to get the actual cached function.
-            // This mess exists to provide a better function name in the browser console if something goes wrong.
-            // Some things online say defining Function.name should work but it doesn't seem to...
+            //
+            // This fnName mess exists to provide a better function name in the browser console if something goes wrong.
+            // Otherwise, it ends up attributed to this script itself, which is not ideal and hard to debug.
+            // How well it works may depend on browser settings too.
             let fnName = `[Snippet] ${snip.title}`;
-            let executable = `(function(trigger, ui, settings, snippetState) {
-                let once = (onceCode) => { let result = onceCode(); once = () => result; return result; }
+            let executable = `(function(trigger, stopRunning, ui, settings, snippetState) {
+                let once = (onceCode) => { let retVal = onceCode(); once = () => retVal; return retVal; }
                 return {[fnName]() { return ui.wrap(() => { \n${snip.code}\n });}};
             })`;
             let fn = ((eval(executable)).apply(null, [
-                this.#makeTriggerFn(snip),
-                this.#makeUi(snip),
-                this.#makeSettingsProxy(snip),
-                this.#getSnippetStateObject(snip),
+                this.#makeTriggerFn(snip), // trigger() function. Pass an action and it will be triggered for one tick. You don't have to think about state.
+                this.#makeStopRunningFn(snip), // stopRunning() function. Stops running the snippet until its changed or the page is reloaded. Use for one-off script mod snippets.
+                this.#makeUi(snip), // ui object. See below.
+                this.#makeSettingsProxy(snip), // Proxy for "settings". Applies overrides in the right processing stage, even if the snippet runs late.
+                {}, // Snippet state: temp storage for your variables. Remains the same object until the eval cache is wiped.
             ]))[fnName];
+            // After all this work, we have a cached function set up in the right scope. Re-use this across invocations.
             this.#evalCache[snippetKey] = fn;
             return fn;
         }
@@ -6147,6 +6168,12 @@
                     // Custom resource list
                     SnippetManager._customDemandsFor[snip.hookPoint].push({name: snip.title, cause: "Snippet", cost: triggerable});
                 }
+            };
+        }
+
+        static #makeStopRunningFn(snip) {
+            return () => {
+                this.#executionStopped[snip].add(snip.id);
             };
         }
 
@@ -6179,6 +6206,17 @@
                     }
                     lastUiHash = curUiHash;
                     return retVal;
+                },
+                get(key, defValue) {
+                    // Get anything without making an UI element.
+                    // This only has very specific uses.
+                    let settingKey = settingForKey(key);
+                    return settings[settingKey] ?? defValue;
+                },
+                set(key, value) {
+                    let settingKey = settingForKey(key);
+                    settingsRaw[settingKey] = value;
+                    updateSettingsFromState();
                 },
                 toggle: (key, label, defValue, hint) => {
                     // Displays an on-off toggle with a label.
@@ -6235,14 +6273,338 @@
                 }
             });
         }
+    }
 
-        // Place for snippets to store internal non-persisted state. Every call gets the same object.
-        static #getSnippetStateObject(snip) {
-            if (!this.#stateObjects[snip.id]) {
-                this.#stateObjects[snip.id] = {};
+    // UI stuff & Monaco handling goes here.
+    class SnippetEditorManager {
+        static _initiatedMonacoLoad = false;
+        static _firstMonacoSetupDone = false;
+
+        static _currentlyEditingSnippet = null;
+        static _currentlyEditingMonaco = null;
+
+        static _unloadEventRegistered = false;
+
+        // We need another layer of wrapper around monaco-export's callback, because we may or may not have to load it in dynamically
+        // based on how the user loads the userscript.
+        static #monacoLoadCallback(callback) {
+            const monacoFallbackUrl = "";
+            let win = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+            win.monacoReadyHook = (win.monacoReadyHook ?? []).push(() => { callback(); });
+            if (!win.monacoReadyHook?.isReady && !this._initiatedMonacoLoad) {
+                // Prep to load
+                this._initiatedMonacoLoad = true;
+                let el = document.createElement("script");
+                el.src = monacoFallbackUrl;
+                el.onerror = () => alert("Failed to load Monaco. Code editor is not functional.");
+                document.body.appendChild(el);
+            }
+        }
+
+        static #firstMonacoSetup() {
+            if (this._firstMonacoSetupDone) return;
+            this._firstMonacoSetupDone = true;
+
+            // Set up defaults and library.
+            monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+                // Target shouldn't matter because it's not compiled, ES2020 should be well supported now.
+                target: monaco.languages.typescript.ScriptTarget.ES2020,
+                // We intentionally exclude the DOM lib. Snippets shouldn't ever manipulate the DOM, it'll make things far too slow.
+                // (Of course you can still do so, this isn't enforced)
+                lib: ["ES2020"],
+                allowJs: true,
+                checkJs: true,
+                allowNonTsExtensions: true, // doesn't seem documented but it's in one of the examples and everything breaks without it
+            });
+            monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+                // Ignore "top level return disallowed", doesn't apply to us.
+                //diagnosticCodesToIgnore: [1108],
+                noSemanticValidation: false,
+                noSyntaxValidation: false,
+            });
+
+            // Add library.
+            let fakeUri = "ts:lib/snippet.d.ts";
+            let libContents = this.getTsDecl();
+            monaco.languages.typescript.javascriptDefaults.addExtraLib(libContents, fakeUri);
+            monaco.editor.createModel(libContents, "typescript", monaco.Uri.parse(fakeUri));
+        }
+
+        // TypeScript declarations to help the user write their stuff. It's not 100% complete, it can never be, but it should help
+        // making simple things like dynamic triggers, etc.
+        static getTsDecl() {
+            const mapResource = (c) => ["Power", "Support"].includes(c) ? c : "Resource";
+
+            // Be very careful when editing this because there's no error messages to be found anywhere...
+            return `
+export declare global {
+    // Part 1: Snippet specific features
+    /** A place for your snippet to put any temporary data. Contents will be preserved between runs. */
+    declare const snippetState = {[key: string|number]: any;};
+    /**
+     * Triggers an action to run on your snippet's behalf.
+     */
+    declare function trigger(action: Action|ResourceList): void;
+    /**
+     * Stops running your snippet until the page is reloaded.
+     */
+    declare function stopRunning(): void;
+    /**
+     * UI functions. You must call these on every tick for them to work.
+     * Being "too smart" about what you call will hide certain options from the user, so simple programming is recommended:
+     *
+     * @example Example usage
+     *
+     * \`\`\`
+     * let checkbox = ui.toggle();
+     * let howMany = ui.number();
+     * if (checkbox) { doThingsWithHowManyHere(howMany); }
+     * \`\`\`
+     */
+    declare const ui = {
+        /** Show a field that will be a boolean on/off toggle, and return the value of that field. */
+        toggle(key: string, label: string, defValue: boolean, hint?: string) => boolean;
+        /** Show a field that will have a string in it, and return the value of that field. */
+        string(key: string, label: string, defValue: string, hint?: string) => string;
+        /** Show a field that will have a number, and return the value of that field. */
+        number(key: string, label: string, defValue: number, hint?: string) => number;
+        /** Show a clickable button. When pressed, this function will return true for one time only. TODO: Implement */
+        button(key: string, label: string, hint?: string) => boolean;
+        /** Get a setting's value. This API is not suggested for usage as the user won't be able to change it. */
+        get(key: string, defValue?: any) => any;
+        /** Set a setting's value. This API is not suggested for usage. */
+        set(key: string, value: any) => void;
+    };
+
+    declare type ResourceKey = keyof resources;
+    declare type ResourceList = {[key: ResourceKey]?: number;};
+
+    // Part 2: Script interfaces
+    declare interface Action {
+        /** Tries to buy the building or research. */
+        click(): boolean;
+        /** Returns true if the building is unlocked (button exists somewhere you can see). */
+        isUnlocked(): boolean;
+        /** For technologies or for missions, returns true if completed. */
+        isComplete(): boolean;
+        /** Returns true if possible autoBuild candidate (unlocked, enabled, below max). */
+        isAutoBuildable(): boolean;
+
+        /**
+         * Without max: Returns true if it's currently possible to buy the building.
+         * With max: Returns true if there's enough storage (building font is not red).
+         */
+        isAffordable(max?: boolean): boolean;
+        /** Whether the action is clickable is determined by whether it is unlocked, affordable and not a "permanently clickable" action */
+        isClickable(): boolean;
+        /** Localized display name of the building, eg "Wardenclyffe" or "Wizard Tower". */
+        title: string;
+        /** Localized description of the building, eg "Advanced science facility". */
+        desc: string;
+        /** How much of the building you have. */
+        count: number;
+        /** How much of the building are intended to be powered on. */
+        stateOnCount: number;
+        /** How much of the building are intended to be powered off. */
+        stateOffCount: number;
+        /** Tries to change the amount of powered buildings, relative to current. adjustCount can be positive or negative. */
+        tryAdjustState(adjustCount: number): boolean;
+
+        /** Cost for next one */
+        cost: {[key: ResourceKey]?: number;};
+
+        /** Many more properties and methods exist and aren't yet documented. */
+        [string]: any;
+    };
+
+    /** ARPA. */
+    declare interface Project extends Action {
+        /** Progress towards next one, number from 0 to 99. */
+        progress: number;
+    }
+
+    /** Research. */
+    declare interface Technology extends Action {
+    }
+
+    /** Representation of a resource. */
+    declare interface Resource {
+        /** How much of the resource you have. */
+        currentQuantity: number;
+        /** Current resource cap. */
+        maxQuantity: number;
+        /** How much of the resource you're gaining or losing, per second. */
+        rateOfChange: number;
+        /** It's complicated. */
+        maxCost: number;
+        /** It's complicated. */
+        storageRequired: number;
+        /** How much of this resource is demanded by triggers/etc. */
+        requestedQuantity: number;
+        /** Some kind of change to production or consumption of this resource was made this tick (informs the script that it should be careful making more changes). */
+        incomeAdusted: boolean;
+
+        /** Displayed resource name */
+        title: string;
+        /** Game ID of resource. */
+        id: ResourceKey;
+
+        // All the getters... TODO: document
+        autoCraftEnabled: boolean;
+        craftWeighting: number;
+        craftPreserve: number;
+        autoStorageEnabled: boolean;
+        storagePriority: number;
+        storeOverflow: boolean;
+        minStorage: number;
+        maxStorage: number;
+        marketPriority: number;
+        autoBuyEnabled: boolean;
+        autoBuyRatio: number;
+        autoSellEnabled: boolean;
+        autoSellRatio: number;
+        autoTradeBuyEnabled: boolean;
+        autoTradeSellEnabled: boolean;
+        autoTradeWeighting: number;
+        autoTradePriority: number;
+        galaxyMarketWeighting: number;
+        galaxyMarketPriority: number;
+
+        /** Resource treated as if more is required at high priority. */
+        isDemanded: boolean;
+
+        /** Many more properties and methods exist and aren't yet documented. */
+        [string]: any;
+    }
+    /** Representation of current power. */
+    declare interface Power extends Resource {
+    }
+    /** Representation of current planetary support. */
+    declare interface Support extends Resource {
+        supportId: string;
+    }
+
+    // Part 3: Common script features
+    /** Building objects. */
+    declare const buildings = {
+        ${Object.keys(buildings).reduce((acc, bn) => acc + "/** " + buildings[bn].name + " */ " + bn + ": Action;\n", "")}
+    };
+    /** Resource objects. */
+    declare const resources = {
+        ${Object.keys(resources).reduce((acc, rn) => acc + "/** " + resources[rn].title + " */ " + rn + ": " + mapResource(resources[rn].constructor.name) + ";\n", '')}
+    };
+    /** ARPA project objects. */
+    declare const projects = {
+        ${Object.keys(projects).reduce((acc, pn) => acc + "/** " + projects[pn].title + " */ " + pn + ": Project;\n", '')}
+    };
+    // Stuff to read from.
+    /** Access buildings by game ID. */
+    declare const buildingIds = { [key: string]: Action|undefined; }
+    /** Access ARPA projects by game ID. */
+    declare const arpaIds = { [key: string]: Project|undefined; }
+    /** Access research by game ID. */
+    declare const techIds = { [key: string]: Technology|undefined; }
+    // Settings. (settings is really a proxy, but that's an implementation detail)
+    /** Access or modify script settings. Must be set every tick to maintain effect. Modified settings will count as higher priority than overrides, so be careful. To un-set, simply stop setting it every tick. */
+    declare const settings = { [key: string]: string|number|object; };
+    /** Access or modify the script's base settings. Changing this may not behave as expected because the changed settings don't get saved to the browser storage. */
+    declare const settingsRaw = { [key: string]: string|number|object; };
+    
+    // Part 4: good luck, you're on your own.
+    /** Access Evolve's debug data directly. Same as "evolve" in your browser console. */
+    declare const game = { [key: string]: any; };
+}
+`;
+        }
+
+        // https://developer.chrome.com/docs/web-platform/page-lifecycle-api#the_beforeunload_event
+        // Browsers really don't want this event registered persistently, but it's the only way we can stop users from losing their work...
+        static _beforeUnloadEvent(e) {
+            if (this._currentlyEditingMonaco && this._currentlyEditingSnippet) {
+                let editorText = this._currentlyEditingMonaco.getValue();
+                if (editorText !== this._currentlyEditingSnippet.code) {
+                    // TODO: No UI to retrieve this...
+                    localStorage.setItem("EvolveScriptSnippetEditPrecloseBackup",);
+                    return "Close editor with unsaved changes?";
+                }
+            }
+        }
+
+        static #setUnloadEventRegistered(newState) {
+            if (newState === this._unloadEventRegistered) {
+                return;
+            }
+            this._unloadEventRegistered = newState;
+
+            let win = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+            if (newState) {
+                win.addEventListener("beforeunload", this._beforeUnloadEvent);
+                console.info("Event regged");
+            }
+            else {
+                win.removeEventListener("beforeunload", this._beforeUnloadEvent);
             }
 
-            return this.#stateObjects[snip.id];
+        }
+
+        static openEditorModal(snip) {
+            // Clean up previous session.
+            this.finishSession();
+
+            this._currentlyEditingSnippet = snip;
+
+            const lightTheme = ["light", "gruvboxLight"].includes(game.global.settings.theme);
+
+            // Make the big modal.
+            let bigModal = $('<div style="position: absolute; display: flex; flex-direction: column; gap: 0.2em; top: 0; left: 0; margin: 0; padding: 0; width: 100%; height: 100%; min-height: 100%; background: #282828; z-index: 1000" id="script-monaco-modal-container">');
+            // Add now-loading and make visible.
+            let loadingPlaceholder = $('<div style="font-size: 32px; display: flex; justify-content: center; align-items: center; color: white">Now Loading...</div>');
+            bigModal.append(loadingPlaceholder).appendTo(document.body);
+
+            this.#monacoLoadCallback(() => {
+                this.#setUnloadEventRegistered(true);
+
+                // Need empty place to put it, get rid of the now loading screen.
+                bigModal.empty();
+                this.#firstMonacoSetup();
+
+                // Make the button bar.
+                let buttonBar = $('<div id="script-monaco-modal-buttonbar" style="height: 2em; display: flex; justify-content: center; align-items: left; gap: 20px">');
+                let titleElem = $('<input type="text" style="width: 400px">').val(snip.title).appendTo(buttonBar);
+                let saveElem = $('<button>Save</button>').appendTo(buttonBar);
+                saveElem.on("click", () => {
+                    snip.title = titleElem.val();
+                    snip.code = this._currentlyEditingMonaco.getValue();
+                    updateSettingsFromState();
+                    SnippetManager.resetSnippet(snip);
+                    this.finishSession();
+                });
+                let closeElem = $('<button>Close</button>').appendTo(buttonBar);
+                closeElem.on("click", () => {
+                    this.finishSession();
+                });
+                buttonBar.appendTo(bigModal);
+
+                // Make the actual editor.
+                let wrap = $('<div id="script-monaco-modal-editor" style="width: 100%; height: 100%">').appendTo(bigModal);
+                this._currentlyEditingMonaco = monaco.editor.create(wrap[0], {
+                    value: snip.code,
+                    language: "javascript",
+                    automaticLayout: true,
+                    theme: lightTheme ? "vs" : "vs-dark",
+                });
+            });
+        }
+
+        static finishSession() {
+            this.#setUnloadEventRegistered(false);
+
+            if (this._currentlyEditingMonaco) {
+                this._currentlyEditingMonaco.dispose();
+                this._currentlyEditingMonaco = null;
+            }
+
+            $("#script-monaco-modal-container").remove();
         }
     }
 
@@ -18412,6 +18774,7 @@
             SnippetManager.cleanCache();
             updateSnippetSettingsContent();
             updateSettingsFromState();
+            resetTabHeight("snippetSettings");
         };
 
         let currentNode = $('#script_snippetContent');
@@ -18443,37 +18806,7 @@
             if (!isNaN(parseInt(idx, 10))) {
                 idx = parseInt(idx, 10);
                 const snip = settingsRaw.snippets[idx];
-                // TODO: Make modal warn on misclick instead of losing snippet
-                openOptionsModal(snip.title, function (modal) {
-                    modal.append('<div style="margin-top: 10px;"><button id="script_snippet_modal_delete" class="button">Delete</button> <button id="script_snippet_modal_save" class="button">Save</button></div>');
-
-                    let titleElem = $(`<input type="text" name="title" style="width: 100%">`).val(snip.title);
-                    modal.append($('<div class="script-modal-snippet-title-holder" style="margin-top: 10px">').append(titleElem));
-
-                    let textareaElem = $(`<textarea style="width: 100%; height: 100%; font-family: monospace">`).val(snip.code);
-                    modal.append($('<div class="script-modal-snippet-editor-holder" style="margin-top: 10px; margin-bottom: 10px; height: 12em">').append(textareaElem));
-
-                    $("#script_snippet_modal_delete").on("click", (evt) => {
-                        settingsRaw.snippets.splice(idx, 1);
-                        $('#scriptModalClose').click();
-                        cleaner();
-                    });
-
-                    $("#script_snippet_modal_save").on("click", (evt) => {
-                        let e = SnippetManager.checkSyntax(textareaElem.val());
-                        if (e === true) {
-                            settingsRaw.snippets[idx].title = titleElem.val();
-                            settingsRaw.snippets[idx].code = textareaElem.val();
-                            settingsRaw.snippets[idx].hookPoint = "early";
-                            $('#scriptModalClose').click();
-                            cleaner();
-                        }
-                        else {
-                            // TODO: show a more visible error of what's wrong.
-                            console.error("Invalid syntax! %o", e);
-                        }
-                    });
-                });
+                SnippetEditorManager.openEditorModal(snip);
             }
         });
 
@@ -18504,7 +18837,6 @@
         addSettingsHeader1(currentNode, "Custom Settings");
         currentNode.append(SnippetManager.settingsUIRoot);
 
-        resetTabHeight("snippetSettings");
         document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;
     }
 

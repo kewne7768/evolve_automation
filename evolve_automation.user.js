@@ -14,6 +14,7 @@
 // @grant        none
 // @require      https://code.jquery.com/jquery-3.6.0.min.js
 // @require      https://code.jquery.com/ui/1.12.1/jquery-ui.min.js
+// @require      https://kewne7768.github.io/monaco-export/monaco-export.js
 // ==/UserScript==
 //
 // This script forked from TMVictor's script version 3.3.1. Original script: https://gist.github.com/TMVictor/3f24e27a21215414ddc68842057482da
@@ -6288,7 +6289,7 @@
         // We need another layer of wrapper around monaco-export's callback, because we may or may not have to load it in dynamically
         // based on how the user loads the userscript.
         static #monacoLoadCallback(callback) {
-            const monacoFallbackUrl = "";
+            const monacoFallbackUrl = "https://kewne7768.github.io/monaco-export/monaco-export.js";
             let win = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
             win.monacoReadyHook = (win.monacoReadyHook ?? []).push(() => { callback(); });
             if (!win.monacoReadyHook?.isReady && !this._initiatedMonacoLoad) {

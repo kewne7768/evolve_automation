@@ -6309,18 +6309,17 @@
 
             // Set up defaults and library.
             monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
-                // Target shouldn't matter because it's not compiled, ES2020 should be well supported now.
-                target: monaco.languages.typescript.ScriptTarget.ES2020,
-                // We intentionally exclude the DOM lib. Snippets shouldn't ever manipulate the DOM, it'll make things far too slow.
-                // (Of course you can still do so, this isn't enforced)
-                lib: ["ES2020"],
+                // Target shouldn't matter because it's not compiled, ES2022 should be well supported now.
+                target: monaco.languages.typescript.ScriptTarget.ES2022,
+                lib: ["es2022", "dom"],
                 allowJs: true,
                 checkJs: true,
                 allowNonTsExtensions: true, // doesn't seem documented but it's in one of the examples and everything breaks without it
             });
             monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
-                // Ignore "top level return disallowed", doesn't apply to us.
-                //diagnosticCodesToIgnore: [1108],
+                // 1108: Top level return disallowed -> Doesn't apply to us, return is a feature.
+                // 2304: Cannot find name 'KeyManager' -> Let people reference things not in the docs without complaining.
+                diagnosticCodesToIgnore: [1108, 2304],
                 noSemanticValidation: false,
                 noSyntaxValidation: false,
             });
@@ -6583,6 +6582,10 @@ declare global {
     // Part 5: good luck, you're on your own.
     /** Access Evolve's debug data directly. Same as "evolve" in your browser console. */
     const game: { [key: string]: any; };
+    /** Access Evolve's debug data directly. Same as "evolve" in your browser console. */
+    const evolve: { [key: string]: any; };
+    /** Misc stuff. */
+    const poly: { [key: string]: any; };
 }
 `;
         }

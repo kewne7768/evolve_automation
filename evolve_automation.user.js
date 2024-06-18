@@ -805,6 +805,9 @@
             this.is = normalizeProperties(flags) ?? {};
         }
 
+        // Same as _vueBinding but doesn't look private
+        get settingId() { return this._vueBinding; }
+
         get autoBuildEnabled() { return settings['bat' + this._vueBinding] }
         get autoStateEnabled() { return settings['bld_s_' + this._vueBinding] }
         get autoStateSmart() { return settings['bld_s2_' + this._vueBinding] }
@@ -6173,6 +6176,9 @@
         static #makeTriggerFn(snip) {
             return (triggerable) => {
                 if (triggerable instanceof Action || triggerable instanceof Technology || triggerable instanceof Project || triggerable instanceof ResourceAction) {
+                    // Silently ignore triggers for not-unlocked buildings, like normal triggers do
+                    if (typeof triggerable.isUnlocked === "function" && !triggerable.isUnlocked()) return;
+
                     SnippetManager._triggersFor[snip.hookPoint].push(triggerable);
                 }
                 else if (typeof triggerable === "object") {
@@ -6282,9 +6288,10 @@
                     trg[settingKey] = newValue;
 
                     // Apply during next tick
-                    SnippetManager._overridesFor[snip.hook][settingKey] = newValue;
-
+                    SnippetManager._overridesFor[snip.hookPoint][settingKey] = newValue;
                     // TODO: Conflict handling?
+
+                    return true;
                 }
             });
         }
@@ -6501,13 +6508,17 @@ declare global {
         isAffordable(max?: boolean): boolean;
         /** Whether the action is clickable is determined by whether it is unlocked, affordable and not a "permanently clickable" action */
         isClickable(): boolean;
-        /** Localized display name of the building, eg "Wardenclyffe" or "Wizard Tower". */
+        /** ID value including location, as used in setting names, eg "space-space_barracks". */
+        settingId: string;
+        /** Base no-location ID value, eg "space_barracks". */
+        id: string;
+        /** Script's name for the building, eg "Red Marine Barracks". */
+        name: string;
+        /** Localized in-game name of the building, eg "Marine Garrison". */
         title: string;
-        /** Localized description of the building, eg "Advanced science facility". */
-        desc: string;
         /** How much of the building you have. */
         count: number;
-        /** How much of the building are intended to be powered on. */
+        /** How much of the building are intended to be powered on. Note: if power/support draw fails, the real number can be lower. */
         stateOnCount: number;
         /** How much of the building are intended to be powered off. */
         stateOffCount: number;

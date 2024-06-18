@@ -5951,10 +5951,8 @@
 
         static #evalCache = {};
         static _executionStopped = new Set();
-        static #lastRunData = { early: {}, late: {} };
-        static _triggersFor = { early: [], late: [] };
-        static _customDemandsFor = { early: [], late: [] };
-        static _overridesFor = { early: {}, late: {} };
+        static #lastRunData = {};
+        static _overrides = {};
 
         // Key is snippet ID.
         static _snippetUiDef = {};
@@ -5962,33 +5960,23 @@
 
         static _showErrors = true;
 
-        // Early hook: default, most appropriate for most things, can override some things, but runs before things like autoBuild weights are set
-        // Late hook: for custom functionality
-        static knownHookPoints = ["early", "late"];
+        static runSnippets() {
+            this.#lastRunData = {};
+            this.activeTriggers = [];
+            this.customResourceDemands = [];
+            this._overrides = {};
 
-        static runSnippets(hookPoint) {
-            if (!this.knownHookPoints.includes(hookPoint)) {
-                throw `Invalid hookPoint ${hookPoint}`;
-            }
-
-            // Reset data associated with this hookPoint
-            this.#lastRunData[hookPoint] = {};
-            this._triggersFor[hookPoint] = [];
-            this._customDemandsFor[hookPoint] = [];
-            this._overridesFor[hookPoint] = {};
-            // UI hook only runs in late. This covers early too.
-            if (hookPoint === "late") {
-                this._snippetUiDef = Object.fromEntries(
-                    Object.entries(this._snippetUiDef).filter(([k, v]) => {
-                        if (!v.alive) { this._snippetUiRedraw = true; return false; }
-                        v.alive = false;
-                        return true;
-                    })
-                );
-            }
+            // Recycle dead UIs
+            this._snippetUiDef = Object.fromEntries(
+                Object.entries(this._snippetUiDef).filter(([k, v]) => {
+                    if (!v.alive) { this._snippetUiRedraw = true; return false; }
+                    v.alive = false;
+                    return true;
+                })
+            );
 
             if (Array.isArray(settingsRaw.snippets) && settingsRaw.snippets.length) {
-                let snippetsToRun = settingsRaw.snippets.filter(snip => snip.active === true && snip.hookPoint === hookPoint);
+                let snippetsToRun = settingsRaw.snippets.filter(snip => snip.active === true);
                 for (let snip of snippetsToRun) {
                     if (this._executionStopped.has(snip.id)) {
                         continue;
@@ -5999,7 +5987,7 @@
                     try {
                         let result = code();
                         if (typeof result === "object") {
-                            Object.assign(this.#lastRunData[hookPoint], result);
+                            Object.assign(this.#lastRunData, result);
                         }
                     }
                     catch(e) {
@@ -6015,10 +6003,8 @@
                 }
             }
 
-            // Update global data
-            snippetData = Object.assign({}, this.#lastRunData.early, this.#lastRunData.late);
-            this.customResourceDemands = [...this._customDemandsFor.early, ...this._customDemandsFor.late];
-            this.activeTriggers = [...this._triggersFor.early, ...this._triggersFor.late];
+            // Update global snippetData (all at once to make the behavior more predictable).
+            snippetData = Object.assign({}, this.#lastRunData);
 
             if (this._snippetUiRedraw) {
                 this.redrawSnippetUI();
@@ -6081,11 +6067,9 @@
         }
 
         static updateOverridesAndUi() {
-            for (let hp of this.knownHookPoints) {
-                Object.entries(this._overridesFor[hp]).forEach(([k, v]) => {
-                    settings[k] = v;
-                });
-            }
+            Object.entries(this._overrides).forEach(([k, v]) => {
+                settings[k] = v;
+            });
         }
 
         static redrawSnippetUI() {
@@ -6176,11 +6160,11 @@
                     // Silently ignore triggers for not-unlocked buildings, like normal triggers do
                     if (typeof triggerable.isUnlocked === "function" && !triggerable.isUnlocked()) return;
 
-                    SnippetManager._triggersFor[snip.hookPoint].push(triggerable);
+                    SnippetManager.activeTriggers.push(triggerable);
                 }
                 else if (typeof triggerable === "object") {
                     // Custom resource list
-                    SnippetManager._customDemandsFor[snip.hookPoint].push({name: snip.title, cause: "Snippet", cost: triggerable});
+                    SnippetManager.customResourceDemands.push({name: snip.title, cause: "Snippet", cost: triggerable});
                 }
             };
         }
@@ -6285,7 +6269,7 @@
                     trg[settingKey] = newValue;
 
                     // Apply during next tick
-                    SnippetManager._overridesFor[snip.hookPoint][settingKey] = newValue;
+                    SnippetManager._overrides[settingKey] = newValue;
                     // TODO: Conflict handling?
 
                     return true;
@@ -14573,7 +14557,7 @@ declare global {
 
         // Let user change overrides in very early snippets
         if (settings.autoSnippet) {
-            SnippetManager.runSnippets("early");
+            SnippetManager.runSnippets();
         }
 
         if (state.goal === "Evolution") {
@@ -14694,10 +14678,6 @@ declare global {
         }
         if (settings.autoMutateTraits) {
             autoMutateTrait();
-        }
-
-        if (settings.autoSnippet) {
-            SnippetManager.runSnippets("late");
         }
 
         KeyManager.finish();
@@ -19081,7 +19061,7 @@ declare global {
         const exampleScript = ``;
 
         $("#script_snippet_add").on("click", (e) => {
-            settingsRaw.snippets.push({title: "New Snippet", code: exampleScript, hookPoint: "early", active: true});
+            settingsRaw.snippets.push({title: "New Snippet", code: exampleScript, active: true});
             cleaner();
         });
 

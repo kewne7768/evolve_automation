@@ -6153,6 +6153,9 @@
                 const resourceList = (list) => list;
                 const checkTypesDynamic = checkTypes;
                 const snippetState = {};
+                let _daily_last = -1;
+                let _daily_ret = undefined;
+                const daily = (dailyCode) => { if (game.global.race.species === "protoplasm") return null; if (game.global.stats.days !== _daily_last) { _daily_last = game.global.stats.days; _daily_ret = dailyCode(); } return _daily_ret; }
                 let once = (onceCode) => { let retVal = onceCode(); once = () => retVal; return retVal; }
                 return {[fnName]() { return ui.wrap(() => { \n${snip.code}\n });}};
             })`;
@@ -6414,6 +6417,9 @@ declare global {
 
     /** Runs your provided callback once and caches the result. Can be used to compute lookup tables, etc. */
     function once<OnceRet>(callback: () => OnceRet): OnceRet;
+
+    /** Runs your provided callback once per game day, with the result cached for calls in between. Will not run during evolution, returning null instead. */
+    function daily<DailyRet>(callback: () => DailyRet): DailyRet|null;
 
     /** A place for your snippet to put any temporary data. Contents will be preserved between runs. */
     const snippetState: {[key: string|number]: any;};

@@ -6302,7 +6302,8 @@
         static #monacoLoadCallback(callback) {
             const monacoFallbackUrl = "https://kewne7768.github.io/monaco-export/monaco-export.js";
             let win = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
-            win.monacoReadyHook = (win.monacoReadyHook ?? []).push(() => { callback(); });
+            win.monacoReadyHook = (win.monacoReadyHook ?? []);
+            win.monacoReadyHook.push(() => { callback(); });
             if (!win.monacoReadyHook?.isReady && !this._initiatedMonacoLoad) {
                 // Prep to load
                 this._initiatedMonacoLoad = true;
@@ -6768,6 +6769,12 @@ declare global {
             let bigModal = $('<div style="position: absolute; display: flex; flex-direction: column; gap: 0.2em; top: 0; left: 0; margin: 0; padding: 0; width: 100%; height: 100%; min-height: 100%; background: #282828; z-index: 1000" id="script-monaco-modal-container">');
             // Add now-loading and make visible.
             let loadingPlaceholder = $('<div style="font-size: 32px; display: flex; justify-content: center; align-items: center; color: white">Now Loading...</div>');
+            // Cancel button
+            $('<button style="font-size: 32px">Cancel</button>').appendTo(bigModal).on("click", () => {
+                this.finishSession();
+                let win = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+                if (win.monacoReadyHook?.splice) win.monacoReadyHook.splice();
+            });
             bigModal.append(loadingPlaceholder).appendTo(document.body);
 
             this.#monacoLoadCallback(() => {

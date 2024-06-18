@@ -6427,7 +6427,7 @@ declare global {
      * }
      * \`\`\`
      */
-    function trigger(action: Action|ResourceList): void;
+    function trigger(action: Action|Technology|ResourceList): void;
     /**
      * Stops running your snippet until the page is reloaded.
      * Useful if you can determine it's not needed anymore (patched everything, wrong challenges, etc).

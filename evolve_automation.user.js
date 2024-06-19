@@ -5958,8 +5958,6 @@
         static _snippetUiDef = {};
         static _snippetUiRedraw = true;
 
-        static _showErrors = true;
-
         static runSnippets() {
             this.#lastRunData = {};
             this.activeTriggers = [];
@@ -5993,13 +5991,10 @@
                     }
                     catch(e) {
                         console.error("Snippet [%s] error: %o", snip.title, e);
-                        if (this._showErrors) {
-                            let msg = `Snippet [${snip.title}] error: ${e}. See the browser console for more information.`;
-                            GameLog.logDanger("special", msg, ['events', 'major_events']);
-
-                            this._showErrors = false;
-                            setTimeout(() => { SnippetManager._showErrors = true; }, 5000);
-                        }
+                        // Stop until user does something to fix it.
+                        this._executionStopped.add(snip.id);
+                        let msg = `Snippet [${snip.title}] error: ${e}. See the browser console for more information.`;
+                        GameLog.logDanger("special", msg, ['events', 'major_events']);
                     }
                 }
             }
@@ -13656,7 +13651,7 @@ declare global {
             let triggerSave = settings.prioritizeTriggers.includes("save");
             state.triggerTargets.push(...SnippetManager.activeTriggers);
             if (triggerSave) {
-                state.conflictTargets.push(SnippetManager.activeTriggers.map(trg => {
+                state.conflictTargets.push(...SnippetManager.activeTriggers.map(trg => {
                     return {name: "Snippet", cause: "Snippet", cost: trg.cost};
                 }));
             }

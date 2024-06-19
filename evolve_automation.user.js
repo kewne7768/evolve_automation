@@ -5986,7 +5986,8 @@
 
                     try {
                         let result = code();
-                        if (typeof result === "object") {
+                        // typeof null is object??? Really, JS?
+                        if (typeof result === "object" && result !== null) {
                             Object.assign(this.#lastRunData, result);
                         }
                     }

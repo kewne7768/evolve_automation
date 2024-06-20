@@ -1283,7 +1283,7 @@
             }
 
             this.cost = {};
-            let maxStep = Math.min(100 - this.progress, state.triggerTargets.includes(this) ? 100 : settings.arpaStep);
+            let maxStep = Math.min(100 - this.progress, state.allTriggerlikeTargets.includes(this) ? 100 : settings.arpaStep);
 
             let adjustedCosts = poly.arpaAdjustCosts(this.definition.cost);
             for (let resourceName in adjustedCosts) {
@@ -2125,6 +2125,9 @@
         unlockedTechs: [],
         unlockedBuildings: [],
         conflictTargets: [],
+        get allTriggerlikeTargets() {
+            return [...this.triggerTargets, ...(settings.autoSnippet ? SnippetManager.activeTriggers : [])];
+        },
 
         maxSpaceMiners: Number.MAX_SAFE_INTEGER,
         globalProductionModifier: 1,
@@ -2730,7 +2733,7 @@
           () => 0
       ],[
           () => true,
-          (building) => state.triggerTargets.includes(building),
+          (building) => state.allTriggerlikeTargets.includes(building),
           () => "Active trigger, processing...",
           () => 0
       ],[
@@ -5852,7 +5855,7 @@
                     project.weighting = 0;
                     project.extraDescription = "Queued project, processing...<br>";
                 }
-                if (state.triggerTargets.includes(project)) {
+                if (state.allTriggerlikeTargets.includes(project)) {
                     project.weighting = 0;
                     project.extraDescription = "Active trigger, processing...<br>";
                 }
@@ -6030,6 +6033,16 @@
             if (this._snippetUiRedraw) {
                 this.redrawSnippetUI();
             }
+        }
+
+        static clickTriggers() {
+            let triggerActive = false;
+            for (let trigger of this.activeTriggers) {
+                if (trigger.click()) {
+                    triggerActive = true;
+                }
+            }
+            return triggerActive;
         }
 
         static prepSnippets() {
@@ -7915,6 +7928,7 @@ declare global {
             missionRequest: true,
             useDemanded: true,
             prioritizeTriggers: "savereq",
+            prioritizeSnippetTriggers: "savereq",
             prioritizeQueue: "savereq",
             prioritizeUnify: "savereq",
             prioritizeOuterFleet: "ignore",
@@ -11608,7 +11622,7 @@ declare global {
         BuildingManager.updateWeighting();
         ProjectManager.updateWeighting();
 
-        let ignoredList = [...state.queuedTargets, ...state.triggerTargets];
+        let ignoredList = [...state.queuedTargets, ...state.allTriggerlikeTargets];
         let buildingList = [...BuildingManager.managedPriorityList(), ...ProjectManager.managedPriorityList()];
 
         // Sort array so we'll have prioritized buildings on top. We'll need that below to avoid deathlocks, when building 1 waits for building 2, and building 2 waits for building 3. That's something we don't want to happen when building 1 and building 3 doesn't conflicts with each other.
@@ -12580,6 +12594,7 @@ declare global {
             addList([{cost: resRequired, isList: true}]);
         }
         if (settings.autoSnippet) {
+            addList(SnippetManager.activeTriggers);
             addList(SnippetManager.customResourceDemands);
         }
 
@@ -13547,8 +13562,9 @@ declare global {
         if (settings.prioritizeTriggers.includes("req")) {
             prioritizedTasks.push(...state.triggerTargets);
         }
-        // Main snippet tasks are covered by triggerTargets, but custom isn't
-        if (settings.autoSnippet) {
+        // Active triggers and demands
+        if (settings.prioritizeSnippetTriggers.includes("req") && settings.autoSnippet) {
+            prioritizedTasks.push(...SnippetManager.activeTriggers);
             prioritizedTasks.push(...SnippetManager.customResourceDemands);
         }
         // Unlocked missions
@@ -13688,8 +13704,7 @@ declare global {
 
         if (settings.autoSnippet) {
             // This is kind of interwoven with real triggers, so we re-use the same setting
-            let triggerSave = settings.prioritizeTriggers.includes("save");
-            state.triggerTargets.push(...SnippetManager.activeTriggers);
+            let triggerSave = settings.prioritizeSnippetTriggers.includes("save");
             if (triggerSave) {
                 state.conflictTargets.push(...SnippetManager.activeTriggers.map(trg => {
                     return {name: "Snippet", cause: "Snippet", cost: trg.cost};
@@ -14278,7 +14293,7 @@ declare global {
             }
         }
 
-        if ((obj instanceof Technology || (!settings.autoARPA && obj._tab === "arpa") || (!settings.autoBuild && obj._tab !== "arpa")) && !state.queuedTargetsAll.includes(obj) && !state.triggerTargets.includes(obj)) {
+        if ((obj instanceof Technology || (!settings.autoARPA && obj._tab === "arpa") || (!settings.autoBuild && obj._tab !== "arpa")) && !state.queuedTargetsAll.includes(obj) && !state.allTriggerlikeTargets.includes(obj)) {
             let conflict = getCostConflict(obj);
             if (conflict) {
                 notes.push(`Conflicts with ${conflict.actionList.map(action => {return `<span class="has-text-info">${action}</span>`;}).join(', ')} for ${conflict.resList.map(res => {return `<span class="has-text-info">${res}</span>`;}).join(', ')} (${conflict.obj.cause})`);
@@ -14288,7 +14303,7 @@ declare global {
         if (obj instanceof Technology) {
             if (state.queuedTargetsAll.includes(obj)) {
                 notes.push("Queued research, processing...");
-            } else if (state.triggerTargets.includes(obj)) {
+            } else if (state.allTriggerlikeTargets.includes(obj)) {
                 notes.push("Active trigger, processing...");
             } else {
                 let conflict = getTechConflict(obj);
@@ -14589,6 +14604,7 @@ declare global {
         // Let user change overrides in very early snippets
         if (settings.autoSnippet) {
             SnippetManager.runSnippets();
+            SnippetManager.clickTriggers();
         }
 
         if (state.goal === "Evolution") {
@@ -16330,7 +16346,8 @@ declare global {
         addSettingsToggle(currentNode, "missionRequest", "Prioritize resources for missions", "Readjust trade routes and production to resources required for unlocked and affordable missions. Missing resources will have 100 priority where applicable(autoMarket, autoGalaxyMarket, autoFactory, autoMiningDroid), or just 'top priority' where not(autoTax, autoCraft, autoCraftsmen, autoQuarry, autoMine, autoExtractor, autoSmelter).");
 
         addSettingsSelect(currentNode, "prioritizeQueue", "Queue", "Alter script behaviour to speed up queued items, prioritizing missing resources.", priority);
-        addSettingsSelect(currentNode, "prioritizeTriggers", "Triggers", "Alter script behaviour to speed up triggers, prioritizing missing resources.", priority);
+        addSettingsSelect(currentNode, "prioritizeTriggers", "Triggers", "Alter script behaviour to speed up normal triggers, prioritizing missing resources.", priority);
+        addSettingsSelect(currentNode, "prioritizeSnippetTriggers", "Snippet Triggers", "Alter script behaviour to speed up snippet-caused triggers, prioritizing missing resources.", priority);
         addSettingsSelect(currentNode, "prioritizeUnify", "Unification", "Alter script behaviour to speed up unification, prioritizing money required to purchase foreign cities.", priority);
         addSettingsSelect(currentNode, "prioritizeOuterFleet", "Ship Yard Blueprint (The True Path)", "Alter script behaviour to assist fleet building, prioritizing resources required for current design of ship.", priority);
 

@@ -6151,6 +6151,7 @@
                 }
             }
 
+            resetTabHeight("snippetSettings");
             document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;
         }
 

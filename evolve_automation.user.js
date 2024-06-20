@@ -19286,6 +19286,28 @@ declare global {
             }
         });
 
+        // If the browser window is closed, we make a backup in localStorage (beforeunload).
+        if (localStorage.getItem("EvolveScriptSnippetEditPrecloseBackup") !== null) {
+            currentNode.append(`
+                <p class="has-text-warning">⚠️ Code editor was closed uncleanly. Backup data is present.</p>
+                <div style="margin: 10px 0;">
+                    <button id="script_snippet_preclose_restore" class="button">Recover Backup Data as New Disabled Snippet</button>
+                    <button id="script_snippet_preclose_wipe" class="button">Delete Backup Data</button>
+                </div>
+            `);
+
+            $("#script_snippet_preclose_restore").on("click", () => {
+                let recoveredCode = localStorage.getItem("EvolveScriptSnippetEditPrecloseBackup");
+                settingsRaw.snippets.push({ id: SnippetManager.randomId(), title: "Recovered Backup Data", code: recoveredCode, active: false });
+                localStorage.removeItem("EvolveScriptSnippetEditPrecloseBackup");
+                cleaner();
+            });
+            $("#script_snippet_preclose_wipe").on("click", () => {
+                localStorage.removeItem("EvolveScriptSnippetEditPrecloseBackup");
+                cleaner();
+            });
+        }
+
         // TODO: Put documentation or something.
         const exampleScript = ``;
 

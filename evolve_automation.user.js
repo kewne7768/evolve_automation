@@ -1705,7 +1705,7 @@
     }
 
     class Trigger {
-        constructor(seq, priority, requirementType, requirementId, requirementCount, actionType, actionId, actionCount) {
+        constructor(seq, priority, requirementType, requirementId, requirementCount, actionType, actionId, actionCount, enabled, enabledOverrides) {
             this.seq = seq;
             this.priority = priority;
 
@@ -1717,6 +1717,11 @@
             this.actionId = actionId;
             this.actionCount = actionCount;
 
+            this.enabled = enabled;
+            // only if present and have at least 1 override in them, otherwise it can stay undefined
+            if (enabledOverrides?.length) {
+                this.enabledOverrides = enabledOverrides;
+            }
             this.complete = false;
         }
 
@@ -1775,6 +1780,9 @@
         }
 
         areRequirementsMet() {
+            let override = this.enabledOverrides?.length > 0 ? evaluateOverride(this.enabledOverrides, `triggers---${this.seq}---enabledOverrides`, "boolean") : OVERRIDE_NO_VALUE;
+            if ((override !== OVERRIDE_NO_VALUE ? override : this.enabled) !== true) return false;
+
             if (this.requirementType === "unlocked" && techIds[this.requirementId].isUnlocked()) {
                 return true;
             }
@@ -5897,8 +5905,8 @@
             this.priorityList.sort((a, b) => a.priority - b.priority);
         },
 
-        AddTrigger(requirementType, requirementId, requirementCount, actionType, actionId, actionCount) {
-            let trigger = new Trigger(this.priorityList.length, this.priorityList.length, requirementType, requirementId, requirementCount, actionType, actionId, actionCount);
+        AddTrigger(requirementType, requirementId, requirementCount, actionType, actionId, actionCount, enabled, enabledOverrides) {
+            let trigger = new Trigger(this.priorityList.length, this.priorityList.length, requirementType, requirementId, requirementCount, actionType, actionId, actionCount, enabled, enabledOverrides);
             this.priorityList.push(trigger);
             return trigger;
         },
@@ -5906,7 +5914,7 @@
         AddTriggerFromSetting(raw) {
             let existingSequence = this.priorityList.some(trigger => trigger.seq === raw.seq);
             if (!existingSequence) {
-                let trigger = new Trigger(raw.seq, raw.priority, raw.requirementType, raw.requirementId, raw.requirementCount, raw.actionType, raw.actionId, raw.actionCount);
+                let trigger = new Trigger(raw.seq, raw.priority, raw.requirementType, raw.requirementId, raw.requirementCount, raw.actionType, raw.actionId, raw.actionCount, raw.enabled, raw.enabledOverrides);
                 this.priorityList.push(trigger);
             }
         },
@@ -8437,10 +8445,21 @@ declare global {
         // Add default triggers only on reset, or first run, but not on casual update
         if (reset || !settingsRaw.hasOwnProperty("autoTrigger")) {
             TriggerManager.priorityList = [];
-            TriggerManager.AddTrigger("built", "space-moon_mission", 1, "build", "space-moon_base", 1);
-            TriggerManager.AddTrigger("built", "space-moon_base", 1, "build", "space-iridium_mine", 1);
-            TriggerManager.AddTrigger("built", "space-moon_base", 1, "build", "space-helium_mine", 1);
+            TriggerManager.AddTrigger("built", "space-moon_mission", 1, "build", "space-moon_base", 1, true);
+            TriggerManager.AddTrigger("built", "space-moon_base", 1, "build", "space-iridium_mine", 1, true);
+            TriggerManager.AddTrigger("built", "space-moon_base", 1, "build", "space-helium_mine", 1, true);
             settingsRaw.triggers = JSON.parse(JSON.stringify(TriggerManager.priorityList));
+        }
+        // If not resetting, try to patch existing triggers up for addition of .enabled
+        if (!reset && settingsRaw.triggers?.length) {
+            for (let i = 0; i < settingsRaw.triggers.length; ++i) {
+                if (typeof settingsRaw.triggers[i].enabled !== "boolean") {
+                    settingsRaw.triggers[i].enabled = true;
+                }
+                if (settingsRaw.triggers[i].enabledOverrides?.length === 0) {
+                    delete settingsRaw.triggers[i].enabledOverrides;
+                }
+            }
         }
         applySettings(def, reset);
     }
@@ -15594,9 +15613,14 @@ declare global {
                 settingsRaw[settingName] = newValue;
             },
             // Get an array to write in. NOTE: Should be returned by reference!
-            getOverrides() {
-                settingsRaw.overrides[settingName] ??= [];
-                return settingsRaw.overrides[settingName];
+            getOverrides(peek) {
+                if (peek) {
+                    return settingsRaw.overrides[settingName];
+                }
+                else {
+                    settingsRaw.overrides[settingName] ??= [];
+                    return settingsRaw.overrides[settingName];
+               }
             },
             // Called when dialog is closed and this thing is no longer needed.
             closed() {
@@ -15635,9 +15659,9 @@ declare global {
                 setPathProperty(settingsRawObj, settingPathName, newValue);
             },
             // Get an array to write in. NOTE: Should be returned by reference!
-            getOverrides() {
+            getOverrides(peek) {
                 let overrides = getPathProperty(settingsRawObj, overridePathName);
-                if (!overrides) {
+                if (!overrides && !peek) {
                     overrides = [];
                     setPathProperty(settingsRawObj, overridePathName, overrides);
                 }
@@ -15658,10 +15682,6 @@ declare global {
         // Others can have a placeholder setting name and a custom handler.
         if (!handler) {
             handler = getOverrideModalSettingNameHandler(settingName);
-        }
-        else if (typeof handler === "function") {
-            // Create on demand
-            handler = handler();
         }
 
         const rebuild = () => { clearInterval(checkTimeout); checkTimeout = null; buildOverrideSettings(settingName, type, options, handler); }
@@ -16243,9 +16263,15 @@ declare global {
     }
 
     // rawValue/overrides/extra exist for the purpose of overriding toggles in snippets and triggers.
-    function addTableToggle(node, settingKey, rawValue, overrides, extra) {
-        if (typeof rawValue === "undefined") rawValue = settingsRaw[settingKey];
-        if (typeof overrides === "undefined") overrides = settingsRaw.overrides[settingKey];
+    function addTableToggle(node, settingKey, handler) {
+        let rawValue, overrides;
+        if (typeof handler === "undefined") {
+            rawValue = settingsRaw[settingKey];
+            overrides = settingsRaw.overrides[settingKey];
+        } else {
+            rawValue = handler.getRaw();
+            overrides = handler.getOverrides(true);
+        }
 
         node.addClass("script_bg_" + settingKey + (overrides ? " inactive-row" : ""))
             .append(addToggleCallbacks($(`
@@ -16253,7 +16279,7 @@ declare global {
             <input class="script_${settingKey}" type="checkbox"${rawValue ? " checked" : ""}>
             <span class="check" style="height:5px; max-width:15px"></span>
             <span style="margin-left: 20px;"></span>
-          </label>`), settingKey, extra));
+          </label>`), settingKey, handler ? {handler} : undefined));
     }
 
     function buildTableLabel(note, title = "", color = "has-text-info") {
@@ -16813,10 +16839,11 @@ declare global {
             <tr>
               <th class="has-text-warning" style="width:16%">Type</th>
               <th class="has-text-warning" style="width:18%">Id</th>
-              <th class="has-text-warning" style="width:11%">Count</th>
+              <th class="has-text-warning" style="width:8%">#</th>
               <th class="has-text-warning" style="width:16%">Type</th>
               <th class="has-text-warning" style="width:18%">Id</th>
-              <th class="has-text-warning" style="width:11%">Count</th>
+              <th class="has-text-warning" style="width:8%">#</th>
+              <th style="width:6%"></th>
               <th style="width:5%"></th>
               <th style="width:5%"></th>
             </tr>
@@ -16828,7 +16855,7 @@ declare global {
 
         for (let i = 0; i < TriggerManager.priorityList.length; i++) {
             const trigger = TriggerManager.priorityList[i];
-            newTableBodyText += `<tr id="script_trigger_${trigger.seq}" value="${trigger.seq}" class="script-draggable"><td style="width:16%"></td><td style="width:18%"></td><td style="width:11%"></td><td style="width:16%"></td><td style="width:18%"></td><td style="width:11%"></td><td style="width:5%"></td><td style="width:5%"><span class="script-lastcolumn"></span></td></tr>`;
+            newTableBodyText += `<tr id="script_trigger_${trigger.seq}" value="${trigger.seq}" class="script-draggable"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td><span class="script-lastcolumn"></span></td></tr>`;
         }
         tableBodyNode.append($(newTableBodyText));
 
@@ -16843,6 +16870,7 @@ declare global {
             buildTriggerActionId(trigger);
             buildTriggerActionCount(trigger);
 
+            buildTriggerToggleColumn(trigger);
             buildTriggerSettingsColumn(trigger);
         }
 
@@ -16864,7 +16892,7 @@ declare global {
     }
 
     function addTriggerSetting() {
-        let trigger = TriggerManager.AddTrigger("unlocked", "tech-club", 0, "research", "tech-club", 0);
+        let trigger = TriggerManager.AddTrigger("unlocked", "tech-club", 0, "research", "tech-club", 0, true);
         updateSettingsFromState();
 
         let tableBodyNode = $('#script_triggerTableBody');
@@ -16882,8 +16910,41 @@ declare global {
         buildTriggerActionId(trigger);
         buildTriggerActionCount(trigger);
 
+        buildTriggerToggleColumn(trigger);
         buildTriggerSettingsColumn(trigger);
         resetTabHeight("triggerSettings");
+    }
+
+    function buildTriggerRequirementType(trigger) {
+        let triggerElement = $('#script_trigger_' + trigger.seq).children().eq(0);
+        triggerElement.empty().off("*");
+
+        // Requirement Type
+        let typeSelectNode = $(`
+          <select>
+            <option value = "unlocked" title = "This condition is met when technology is shown in research tab">Unlocked</option>
+            <option value = "researched" title = "This condition is met when technology is researched">Researched</option>
+            <option value = "built" title = "This condition is met when you have 'count' or greater amount of buildings">Built</option>
+            <option value = "chain" title = "This condition is met when above trigger is complete, always true for first trigger in list">Chain</option>
+          </select>`);
+        typeSelectNode.val(trigger.requirementType);
+
+        triggerElement.append(typeSelectNode);
+
+        typeSelectNode.on('change', function () {
+            trigger.updateRequirementType(this.value);
+
+            buildTriggerRequirementId(trigger);
+            buildTriggerRequirementCount(trigger);
+
+            buildTriggerActionType(trigger);
+            buildTriggerActionId(trigger);
+            buildTriggerActionCount(trigger);
+
+            updateSettingsFromState();
+        });
+
+        return;
     }
 
     function buildTriggerRequirementType(trigger) {
@@ -16990,8 +17051,18 @@ declare global {
         }
     }
 
-    function buildTriggerSettingsColumn(trigger) {
+    function buildTriggerToggleColumn(trigger) {
         let triggerElement = $('#script_trigger_' + trigger.seq).children().eq(6);
+        triggerElement.empty().off("*");
+
+        let handler = getOverrideModalPathHandler(`priorityList---${trigger.seq}---enabled`, `priorityList---${trigger.seq}---enabledOverrides`, TriggerManager);
+        addTableToggle(triggerElement, `priorityList---${trigger.seq}---enabled`, handler);
+
+        triggerElement.find("label").css("margin-left", "0");
+    }
+
+    function buildTriggerSettingsColumn(trigger) {
+        let triggerElement = $('#script_trigger_' + trigger.seq).children().eq(7);
         triggerElement.empty().off("*");
 
         let deleteTriggerButton = $('<a class="button is-dark is-small" style="width: 26px; height: 26px"><span>X</span></a>');
@@ -17063,7 +17134,7 @@ declare global {
     }
 
     function buildTriggerCountInput(trigger, property) {
-        let textBox = $('<input type="text" class="input is-small" style="height: 22px; width:100%"/>');
+        let textBox = $('<input type="text" class="input is-small" style="height: 22px; width:100%; padding: 5px"/>');
         textBox.val(trigger[property]);
 
         textBox.on('change', function() {
@@ -19156,9 +19227,7 @@ declare global {
                 </td>
             </tr>
             `);
-            addTableToggle(node.find(".snippet-toggle"), `snippets---${i}---active`, snippet.active, snippet.activeOverrides, {
-                handler: getOverrideModalPathHandler(['snippets', i, 'active'], ['snippets', i, 'activeOverrides']),
-            });
+            addTableToggle(node.find(".snippet-toggle"), `snippets---${i}---active`, getOverrideModalPathHandler(['snippets', i, 'active'], ['snippets', i, 'activeOverrides']));
             tableBodyNode.append(node);
         }
 

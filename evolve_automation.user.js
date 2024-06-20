@@ -5988,7 +5988,10 @@
             );
 
             if (Array.isArray(settingsRaw.snippets) && settingsRaw.snippets.length) {
-                let snippetsToRun = settingsRaw.snippets.filter(snip => snip.active === true);
+                let snippetsToRun = settingsRaw.snippets.filter((snip, i) => {
+                    let override = snip.activeOverrides?.length > 0 ? evaluateOverride(snip.activeOverrides, `snippet---${i}---activeOverrides`, "boolean") : OVERRIDE_NO_VALUE;
+                    return override !== OVERRIDE_NO_VALUE ? override : snip.active;
+                });
                 for (let snip of snippetsToRun) {
                     if (this._executionStopped.has(snip.id)) {
                         continue;
@@ -6202,7 +6205,8 @@
                     curUiHash = "";
                     uiArr = [];
                     let retVal = snippetFn();
-                    if (lastUiHash !== curUiHash) {
+                    // UI can disappear if toggled by override.
+                    if (lastUiHash !== curUiHash || (lastUiHash !== "" && !SnippetManager._snippetUiDef[snip.id])) {
                         if (curUiHash !== "") {
                             SnippetManager._snippetUiDef[snip.id] = {
                                 alive: true,
@@ -14513,11 +14517,6 @@ declare global {
                 }
             }
         }
-
-        let currentNode = $(`#script_override_true_value:visible`);
-        if (currentNode.length !== 0) {
-            changeDisplayInputNode(currentNode);
-        }
     }
 
     function automateLab() {
@@ -15574,14 +15573,115 @@ declare global {
             openOptionsModal(event.data.label, function(modal) {
                 modal.append(`<div style="margin-top: 10px; margin-bottom: 10px;" id="script_${event.data.name}Modal"></div>`);
                 $('.script-modal-content').addClass('override-modal');
-                buildOverrideSettings(event.data.name, event.data.type, event.data.options);
+                buildOverrideSettings(event.data.name, event.data.type, event.data.options, event.data.handler);
             });
         }
     }
 
-    function buildOverrideSettings(settingName, type, options) {
-        const rebuild = () => buildOverrideSettings(settingName, type, options);
-        let overrides = settingsRaw.overrides[settingName] ?? [];
+    // Default implementation, used for simple setting names, takes from settings/settingsRaw/settingsRaw.overrides.
+    function getOverrideModalSettingNameHandler(settingName) {
+        return {
+            // Get the current value (with overrides applied).
+            getCurrent() {
+                return settings[settingName];
+            },
+            // Get the raw value.
+            getRaw() {
+                return settingsRaw[settingName];
+            },
+            // Set the raw value.
+            setRaw(newValue) {
+                settingsRaw[settingName] = newValue;
+            },
+            // Get an array to write in. NOTE: Should be returned by reference!
+            getOverrides() {
+                settingsRaw.overrides[settingName] ??= [];
+                return settingsRaw.overrides[settingName];
+            },
+            // Called when dialog is closed and this thing is no longer needed.
+            closed() {
+                // Can't always guarantee this is called (eg F5 on window). Too bad.
+                if (settingsRaw.overrides[settingName]?.length === 0) {
+                    delete settingsRaw.overrides[settingName];
+                }
+            },
+        };
+    }
+
+    // Fancier, takes from settingsRaw, an user-given path name in settingsRaw for the raw setting and user-given path name for the override.
+    // Optionally in a different object altogether.
+    // Could be used similar to the above by calling with ("exampleSetting", "overrides.exampleSetting", settingsRaw).
+    function getOverrideModalPathHandler(settingPathName, overridePathName, settingsRawObj) {
+        if (!settingsRawObj) settingsRawObj = settingsRaw;
+        return {
+            // Get the current value (with overrides applied).
+            getCurrent() {
+                let base = getPathProperty(settingsRawObj, settingPathName);
+                let overrides = getPathProperty(settingsRawObj, overridePathName);
+                if (overrides) {
+                    let overrideValue = evaluateOverride(overrides, typeof settingPathName === "string" ? settingPathName : settingPathName.join(pathSplitKey), typeof base);
+                    if (overrideValue !== OVERRIDE_NO_VALUE) {
+                        return overrideValue;
+                    }
+                }
+                return base;
+            },
+            // Get the raw value.
+            getRaw() {
+                return getPathProperty(settingsRawObj, settingPathName);
+            },
+            // Set the raw value.
+            setRaw(newValue) {
+                setPathProperty(settingsRawObj, settingPathName, newValue);
+            },
+            // Get an array to write in. NOTE: Should be returned by reference!
+            getOverrides() {
+                let overrides = getPathProperty(settingsRawObj, overridePathName);
+                if (!overrides) {
+                    overrides = [];
+                    setPathProperty(settingsRawObj, overridePathName, overrides);
+                }
+                return overrides;
+            },
+            // Called when dialog is closed and this thing is no longer needed.
+            closed() {
+                let overrides = getPathProperty(settingsRawObj, overridePathName);
+                if (overrides?.length === 0) {
+                    deletePathProperty(settingsRawObj, overridePathName);
+                }
+            },
+        };
+    }
+
+    function buildOverrideSettings(settingName, type, options, handler) {
+        // Handler is only specified for some specific things not storing the override in the main location.
+        // Others can have a placeholder setting name and a custom handler.
+        if (!handler) {
+            handler = getOverrideModalSettingNameHandler(settingName);
+        }
+        else if (typeof handler === "function") {
+            // Create on demand
+            handler = handler();
+        }
+
+        const rebuild = () => { clearInterval(checkTimeout); checkTimeout = null; buildOverrideSettings(settingName, type, options, handler); }
+        let overrides = handler.getOverrides();
+
+        // Updates current value.
+        let checkTimeout = setInterval(() => {
+            if ($("#scriptModal").css('display') === 'none') {
+                handler.closed();
+                clearInterval(checkTimeout);
+                checkTimeout = null;
+            }
+            else {
+                // Not always possible to get this from the right place, need to poll.
+                let currentNode = $(`#script_override_true_value:visible`);
+                if (currentNode.length !== 0) {
+                    changeDisplayInputNode(currentNode, handler.getCurrent());
+                }
+            }
+        }, 100);
 
         let currentNode = $(`#script_${settingName}Modal`);
         currentNode.empty().off("*");
@@ -15611,7 +15711,7 @@ declare global {
             newTableBodyText += `<tr id="script_${settingName}_o${i}" value="${i}" class="script-draggable"><td style="width:16%"></td><td style="width:16%"></td><td style="width:10%"></td><td style="width:16%"></td><td style="width:16%"></td><td style="width:14%"></td><td style="width:12%"><span class="script-lastcolumn"></span></td></tr>`;
         }
 
-        let listField = typeof settingsRaw[settingName] === "object";
+        let listField = typeof handler.getRaw() === "object";
         let note = listField ?
           "All values passed checks will be added or removed from list":
           "First value passed check will be used. Default value:";
@@ -15639,23 +15739,22 @@ declare global {
         // Default input
         if (!listField) {
             $(`#script_${settingName}_d td:eq(1)`)
-              .append(buildInputNode(type, options, settingsRaw[settingName], function(result) {
-                  settingsRaw[settingName] = result;
+              .append(buildInputNode(type, options, handler.getRaw(), function(result) {
+                  handler.setRaw(result);
                   updateSettingsFromState();
 
                   let retType = typeof result === "boolean" ? "checked" : "value";
-                  $(".script_" + settingName).prop(retType, settingsRaw[settingName]);
+                  $(".script_" + settingName).prop(retType, handler.getRaw());
               }));
         }
-        $(`#script_override_true_value td:eq(1)`).append(buildInputNodeForDisplay(type, options, settings[settingName]));
+        $(`#script_override_true_value td:eq(1)`).append(buildInputNodeForDisplay(type, options, handler.getCurrent()));
 
         // Add button
         $(`#script_${settingName}_d a`).on('click', function() {
-            if (!settingsRaw.overrides[settingName]) {
-                settingsRaw.overrides[settingName] = [];
+            if (overrides.length === 0) {
                 $(".script_bg_" + settingName).addClass("inactive-row");
             }
-            settingsRaw.overrides[settingName].push({type1: "Boolean", arg1: true, type2: "Boolean", arg2: false, cmp: "==", ret: settingsRaw[settingName]})
+            overrides.push({type1: "Boolean", arg1: true, type2: "Boolean", arg2: false, cmp: "==", ret: handler.getRaw()})
             updateSettingsFromState();
             rebuild();
         });
@@ -15678,9 +15777,9 @@ declare global {
                 tableElement.append(buildConditionRet(override, type, options));
             }
             tableElement = tableElement.next();
-            tableElement.append(buildConditionRemove(settingName, i, rebuild));
-            tableElement.append(buildConditionDuplicate(settingName, i, rebuild));
-            tableElement.append(buildConditionEvalize(settingName, i, rebuild));
+            tableElement.append(buildConditionRemove(settingName, i, rebuild, overrides));
+            tableElement.append(buildConditionDuplicate(settingName, i, rebuild, overrides));
+            tableElement.append(buildConditionEvalize(settingName, i, rebuild, overrides));
 
         }
 
@@ -15689,7 +15788,10 @@ declare global {
             helper: sorterHelper,
             update: function() {
                 let newOrder = tableBodyNode.sortable('toArray', {attribute: 'value'});
-                settingsRaw.overrides[settingName] = newOrder.map((i) => settingsRaw.overrides[settingName][i]);
+                let newOverridesContents = newOrder.map((i) => overrides[i]);
+                // Need to maintain same references so this is a little ugly...
+                overrides.splice(0);
+                overrides.push(...newOverridesContents);
 
                 updateSettingsFromState();
                 rebuild();
@@ -15776,10 +15878,9 @@ declare global {
         }
     }
 
-    function changeDisplayInputNode(currentNode) {
+    function changeDisplayInputNode(currentNode, value) {
         let type = currentNode.attr("type");
         let id = currentNode.attr("value");
-        let value = settings[currentNode.attr("value")];
         let node = currentNode.find(`td:eq(1)>*:first-child`);
         switch (type) {
             case "string":
@@ -15828,12 +15929,11 @@ declare global {
         });
     }
 
-    function buildConditionRemove(settingName, id, rebuild) {
+    function buildConditionRemove(settingName, id, rebuild, overrides) {
         return $(`<a class="button is-small" style="width: 26px; height: 26px"><span>-</span></a>`)
         .on('click', function() {
-            settingsRaw.overrides[settingName].splice(id, 1);
-            if (settingsRaw.overrides[settingName].length === 0) {
-                delete settingsRaw.overrides[settingName];
+            overrides.splice(id, 1);
+            if (overrides.length === 0) {
                 $(".script_bg_" + settingName).removeClass("inactive-row");
             }
             updateSettingsFromState();
@@ -15841,19 +15941,19 @@ declare global {
         });
     }
 
-    function buildConditionDuplicate(settingName, id, rebuild) {
+    function buildConditionDuplicate(settingName, id, rebuild, overrides) {
         return $(`<a class="button is-small" style="width: 26px; height: 26px"><span style="font-size: 1.2rem;">&#9282;</span></a>`)
         .on('click', function() {
-            settingsRaw.overrides[settingName].splice(id, 0, {...settingsRaw.overrides[settingName][id]});
+            overrides.splice(id, 0, {...overrides[id]});
             updateSettingsFromState();
             rebuild();
         });
     }
 
-    function buildConditionEvalize(settingName, id, rebuild) {
+    function buildConditionEvalize(settingName, id, rebuild, overrides) {
         return $(`<a class="button is-small" style="width: 26px; height: 26px"><span style="font-size: 0.9rem;">E</span></a>`)
         .on('click', function() {
-            let override = settingsRaw.overrides[settingName][id];
+            let override = overrides[id];
             let check = checkCompare[override.cmp].toString().substr(10)
                 .replace(/([ab])/g, (s, v) => {
                     let idx = v === "a" ? 1 : 2;
@@ -16126,25 +16226,34 @@ declare global {
             .append(addInputCallbacks($(`<input class="script_${settingKey}" type="text" class="input is-small" style="height: 25px; width:100%" value="${settingsRaw[settingKey]}"/>`), settingKey));
     }
 
-    function addToggleCallbacks(node, settingKey) {
+    function addToggleCallbacks(node, settingKey, extra) {
         return node
         .on('change', 'input', function() {
-            settingsRaw[settingKey] = this.checked;
+            if (extra && extra.handler) {
+                extra.handler.setRaw(this.checked);
+            }
+            else {
+                settingsRaw[settingKey] = this.checked;
+            }
             updateSettingsFromState();
 
-            $(".script_" + settingKey).prop('checked', settingsRaw[settingKey]);
+            $(".script_" + settingKey).prop('checked', this.checked);
         })
-        .on('click', {label: `Toggle (${settingKey})`, name: settingKey, type: "boolean"}, openOverrideModal);
+        .on('click', Object.assign({label: `Toggle (${settingKey})`, name: settingKey, type: "boolean"}, extra || {}), openOverrideModal);
     }
 
-    function addTableToggle(node, settingKey) {
-        node.addClass("script_bg_" + settingKey + (settingsRaw.overrides[settingKey] ? " inactive-row" : ""))
+    // rawValue/overrides/extra exist for the purpose of overriding toggles in snippets and triggers.
+    function addTableToggle(node, settingKey, rawValue, overrides, extra) {
+        if (typeof rawValue === "undefined") rawValue = settingsRaw[settingKey];
+        if (typeof overrides === "undefined") overrides = settingsRaw.overrides[settingKey];
+
+        node.addClass("script_bg_" + settingKey + (overrides ? " inactive-row" : ""))
             .append(addToggleCallbacks($(`
           <label tabindex="0" class="switch" style="position:absolute; margin-top: 8px; margin-left: 10px;">
-            <input class="script_${settingKey}" type="checkbox"${settingsRaw[settingKey] ? " checked" : ""}>
+            <input class="script_${settingKey}" type="checkbox"${rawValue ? " checked" : ""}>
             <span class="check" style="height:5px; max-width:15px"></span>
             <span style="margin-left: 20px;"></span>
-          </label>`), settingKey));
+          </label>`), settingKey, extra));
     }
 
     function buildTableLabel(note, title = "", color = "has-text-info") {
@@ -19034,21 +19143,24 @@ declare global {
           </table>`);
 
         let tableBodyNode = $('#script_snippetTableBody');
-        let newTableBodyText = "";
 
         for (let i = 0; i < settingsRaw.snippets.length; i++) {
             const snippet = settingsRaw.snippets[i];
-            newTableBodyText += `
+            let node = $(`
             <tr data-idx="${i}" class="script-draggable" style="height: 40px">
-                <td>On/off</td>
+                <td class="snippet-toggle"></td>
                 <td>${snippet.title}</td>
                 <td class="script-buttons">
-                    <a class="edit-button button is-dark is-small" style="margin: -8px 0 0 0; padding: 1px 12px;">✎</button>
-                    <a class="delete-button button is-dark is-small" style="margin: -8px 0 0 8px; padding: 1px 12px;">X</button>
+                    <a class="edit-button button is-dark is-small" style="margin: -4px 0 0 0; padding: 1px 12px;">✎</button>
+                    <a class="delete-button button is-dark is-small" style="margin: -4px 0 0 8px; padding: 1px 12px;">X</button>
                 </td>
-            </tr>`;
+            </tr>
+            `);
+            addTableToggle(node.find(".snippet-toggle"), `snippets---${i}---active`, snippet.active, snippet.activeOverrides, {
+                handler: getOverrideModalPathHandler(['snippets', i, 'active'], ['snippets', i, 'activeOverrides']),
+            });
+            tableBodyNode.append(node);
         }
-        tableBodyNode.append($(newTableBodyText));
 
         tableBodyNode.on("click", ".edit-button", (e) => {
             let idx = parseInt(e.target?.closest("tr")?.dataset?.idx, 10);
@@ -20039,6 +20151,74 @@ declare global {
             }
         }
         return list;
+    }
+
+    // FAQ: "Why is this split key --- instead of something sane and obvious like a dot?"
+    // Answer: Good question! Setting names are used all over the ID and class names.
+    // You can't put dots in an ID and expect things to work, especially since they're often checked via jQuery.
+    // (eg $(".setting-" + settingName + "-toggle"))
+    // That'd change into ".setting-triggers.123.active-toggle" or the like: a check for an element with .setting-triggers, .123 and .active-toggle on it.
+    // That's not what we want, that's a completely different query!
+    // It can be quoted but it'd need to be done consistently everywhere.
+    // So we have three options:
+    // Option 1 is to clean all of that up: put some replace function and use it everywhere where we reference classes or IDs.
+    // It would be an extremely annoying and difficult task with a huge chance of breaking some not obvious things.
+    // Option 2 is to make it a valid CSS identifier, but not one that's already used for something.
+    // Only two options really come to mind: repeats or combinations of - and _. I settled on this with ---.
+    // Could be ___ or the like too.
+    // Option 3 is to not do this. But then, you need some other mechanism that works as triggers get added/moved/deleted.
+    // Eg adding an ID value. Snippets did this but it pollutes the amount of settings very much and is annoying to keep track of.
+    //
+    // (or you can just pass it as array. this is better...)
+    const pathSplitKey = "---";
+
+    // Turns an obj and "a---b---c" style path key (or pre-split array) into "obj?.a?.b?.c". If any of the keys aren't found it will return defValue.
+    function getPathProperty(obj, path, defValue = undefined) {
+        if (!obj) return defValue;
+        let pathParts = Array.isArray(path) ? path : path.split(pathSplitKey);
+        for (let i = 0; i < pathParts.length; i++) {
+            let key = pathParts[i];
+            if (Array.isArray(obj)) {
+                key = parseInt(key, 10);
+            }
+            if (!(key in obj)) return defValue;
+            obj = obj[key];
+        }
+        return obj;
+    }
+
+    // Turns an obj, "a---b---c" style path key (or pre-split array) and a value into "obj.a.b.c = val". Returns true if set succeeded, false if failed.
+    // Warning: if you copy-paste this somewhere else, note of prototype pollution attacks if an untrusted user controls the path.
+    // (Don't really care here.)
+    function setPathProperty(obj, path, value) {
+        if (!obj) return false;
+        let pathParts = Array.isArray(path) ? path : path.split(pathSplitKey);
+        for (let i = 0; i < pathParts.length - 1; i++) {
+            let key = pathParts[i];
+            if (Array.isArray(obj)) {
+                key = parseInt(key, 10);
+            }
+            if (!(key in obj)) return false;
+            obj = obj[key];
+        }
+        obj[pathParts[pathParts.length - 1]] = value;
+        return true;
+    }
+
+    // Takes an obj, "a---b---c" style path key (or pre-split array) and a value to do "delete obj.a.b.c;"
+    function deletePathProperty(obj, path) {
+        if (!obj) return false;
+        let pathParts = Array.isArray(path) ? path : path.split(pathSplitKey);
+        for (let i = 0; i < pathParts.length - 1; i++) {
+            let key = pathParts[i];
+            if (Array.isArray(obj)) {
+                key = parseInt(key, 10);
+            }
+            if (!(key in obj)) return false;
+            obj = obj[key];
+        }
+        delete obj[pathParts[pathParts.length - 1]];
+        return true;
     }
 
     function traitVal(trait, idx, opt) {

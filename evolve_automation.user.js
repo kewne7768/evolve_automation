@@ -6434,7 +6434,7 @@ declare global {
      * trigger(resourceList({Mythril: 100000, Bolognium: 1234567}));
      * \`\`\
      */
-    function resourceList(list: ResourceList): ResourceList;
+    function resourceList<IncludedResources extends ResourceList>(list: IncludedResources): ResourceList&IncludedResources;
     /**
      * UI functions. You must call these on every tick for them to work.
      * Being "too smart" about what you call will hide certain options from the user, so simple programming is recommended:

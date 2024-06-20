@@ -5958,11 +5958,25 @@
         static _snippetUiDef = {};
         static _snippetUiRedraw = true;
 
+        static #evolutionPhaseComplete = false;
+
         static runSnippets() {
             this.#lastRunData = {};
             this.activeTriggers = [];
             this.customResourceDemands = [];
             this._overrides = {};
+
+            // Snippets run during evolution, but we reset the stopRunning() state one time after leaving it.
+            // Most users probably won't think of the evolution phase, but some might want to script it to choose a run type.
+            // This creates a much more ergonomic API for challenge checks.
+            // Otherwise, snippets like if(!cataclysm) stopRunning() would look like they work while the user is developing them
+            // but would already have stopped running after a new run is started. (Unless it triggers a page refresh)
+            if (!this.#evolutionPhaseComplete) {
+                this.#evolutionPhaseComplete = state.goal !== "Evolution";
+                if (this.#evolutionPhaseComplete) {
+                    this._executionStopped.clear();
+                }
+            }
 
             // Recycle dead UIs
             this._snippetUiDef = Object.fromEntries(

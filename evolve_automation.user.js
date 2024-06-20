@@ -6042,12 +6042,15 @@
             });
         }
 
-        static cleanCache() {
+        // Soft-reset all snippets.
+        static softResetAllSnippets() {
             this.#evalCache = {};
-            this._executionStopped = new Set();
+            this._executionStopped.clear();
+            this._snippetUiDef = {};
+            this._snippetUiRedraw = true;
         }
 
-        // Reset a single snippet. Used when updating the code.
+        // Soft-reset a single snippet. Used when updating the code.
         static resetSnippet(snip) {
             const snipId = snip.id;
             // Deleting the eval cache will make new copies of many of its objects.
@@ -19009,7 +19012,7 @@ declare global {
         let currentScrollPosition = document.documentElement.scrollTop || document.body.scrollTop;
 
         const cleaner = () => {
-            SnippetManager.cleanCache();
+            SnippetManager.softResetAllSnippets();
             updateSnippetSettingsContent();
             updateSettingsFromState();
             resetTabHeight("snippetSettings");

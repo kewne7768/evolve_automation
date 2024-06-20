@@ -6193,8 +6193,8 @@
         }
 
         static #makeTriggerFn(snip) {
-            return (triggerable) => {
-                if (triggerable instanceof Action || triggerable instanceof Technology || triggerable instanceof Project || triggerable instanceof ResourceAction) {
+            return (triggerable, allowedActions) => {
+                if (triggerable instanceof Action || triggerable instanceof Technology) {
                     // Silently ignore triggers for not-unlocked buildings, like normal triggers do
                     if (typeof triggerable.isUnlocked === "function" && !triggerable.isUnlocked()) return;
 
@@ -6202,7 +6202,12 @@
                 }
                 else if (typeof triggerable === "object") {
                     // Custom resource list
-                    SnippetManager.customResourceDemands.push({name: snip.title, cause: "Snippet", cost: triggerable});
+                    SnippetManager.customResourceDemands.push({
+                        name: snip.title,
+                        cause: "Snippet",
+                        cost: triggerable,
+                        allowedConflicts: allowedActions,
+                    });
                 }
             };
         }
@@ -6453,14 +6458,26 @@ declare global {
     /**
      * Triggers an Action on your snippet's behalf.
      * It will keep running until you stop making the trigger() call.
+     *
+     * Custom resource lists can be passed too.
+     * Custom resource lists can optionally include a list of permissible buildings that are allowed to spend those resources as second parameter.
+     * (Currently not possible on Actions.)
+     *
      * @example Example: After Stargate built, build 50 attractors
      * \`\`\`
      * if (buildings.BlackholeStargateComplete.count && buildings.BadlandsAttractor.count < 50) {
-     *     trigger(buildings.BadlandsAttractor);
+     *   trigger(buildings.BadlandsAttractor);
      * }
      * \`\`\`
+     *
+     * @example Custom resource list
+     * \`\`\`
+     * trigger({Mythril: 1000000}, [buildings.RedZiggurat, buildings.RuinsArchaeology]);
+     * \`\`\`
      */
-    function trigger(action: Action|Technology|ResourceList): void;
+    function trigger<T extends Action|Technology | ResourceList>(action: T): void;
+    function trigger<T extends ResourceList>(action: T, allowedActions?: (Action | Technology)[]|undefined): void;
+
     /**
      * Stops running your snippet until the page is reloaded.
      * Useful if you can determine it's not needed anymore (patched everything, wrong challenges, etc).
@@ -13709,7 +13726,7 @@ declare global {
             if (triggerSave) {
                 state.conflictTargets.push(...SnippetManager.activeTriggers.map(trg => {
                     return {name: "Snippet", cause: "Snippet", cost: trg.cost};
-                }));
+                }), ...SnippetManager.customResourceDemands);
             }
         }
 
@@ -20071,6 +20088,10 @@ declare global {
         let conflict = {};
 
         for (let priorityTarget of state.conflictTargets) {
+            if (priorityTarget.allowedConflicts?.length && priorityTarget.allowedConflicts.includes(action)) {
+                continue;
+            }
+
             let blockKnowledge = true;
             for (let res in priorityTarget.cost) {
                 if (res !== "Knowledge" && resources[res].currentQuantity < priorityTarget.cost[res]) {

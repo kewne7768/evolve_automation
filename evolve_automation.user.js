@@ -19262,6 +19262,7 @@ declare global {
                 </td>
             </tr>
             `);
+            node.find("td").css("padding-bottom", "0.35em");
             addTableToggle(node.find(".snippet-toggle"), `snippets---${i}---active`, getOverrideModalPathHandler(['snippets', i, 'active'], ['snippets', i, 'activeOverrides']));
             tableBodyNode.append(node);
         }
@@ -19312,7 +19313,7 @@ declare global {
         const exampleScript = ``;
 
         $("#script_snippet_add").on("click", (e) => {
-            settingsRaw.snippets.push({title: "New Snippet", code: exampleScript, active: true});
+            settingsRaw.snippets.push({id: SnippetManager.randomId(), title: "New Snippet", code: exampleScript, active: true});
             cleaner();
         });
 

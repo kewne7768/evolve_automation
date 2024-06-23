@@ -13612,9 +13612,9 @@ declare global {
                 for (let res in demandedObject.cost) {
                     let resource = resources[res];
                     let quantity = demandedObject.cost[res];
-                    // Double request for project, to make it smoother
-                    if (demandedObject instanceof Project && demandedObject.progress < 99) {
-                        quantity *= 2;
+                    // Make an attempt to demand the entire project
+                    if (demandedObject instanceof Project && res !== "Knowledge") {
+                        quantity *= (100 - demandedObject.progress) / demandedObject.currentStep;
                     }
                     resource.requestedQuantity = Math.max(resource.requestedQuantity, quantity);
                 }

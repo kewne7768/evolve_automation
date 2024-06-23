@@ -13664,7 +13664,7 @@ declare global {
         }
         if (resources.Nano_Tube.isDemanded()) {
             // 8 Coal/s/slot
-            const minCoal = factoryMin(resources.Coal, 20);
+            const minCoal = factoryMin(resources.Coal, 8);
             if (resources.Coal.currentQuantity < minCoal) {
                 resources.Coal.requestedQuantity = Math.max(resources.Coal.requestedQuantity, minCoal);
             }

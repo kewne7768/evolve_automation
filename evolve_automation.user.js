@@ -8360,6 +8360,7 @@ declare global {
         let def = {
             autoARPA: false,
             arpaScaleWeighting: true,
+            arpaDemandWhole: false,
             arpaStep: 5,
         }
 
@@ -13635,8 +13636,7 @@ declare global {
         if (prioritizedTasks.length > 0) {
             for (let i = 0; i < prioritizedTasks.length; i++){
                 let demandedObject = prioritizedTasks[i];
-                // TODO: Only relevant for ARPAs and focus on full project cost/current step only should be a setting
-                let demandCost = demandedObject.fullRemainingCost ? demandedObject.fullRemainingCost : demandedObject.cost;
+                let demandCost = (settings.arpaDemandWhole && demandedObject.fullRemainingCost) ? demandedObject.fullRemainingCost : demandedObject.cost;
                 for (let res in demandCost) {
                     let resource = resources[res];
                     let quantity = demandCost[res];
@@ -19193,6 +19193,7 @@ declare global {
         currentNode.empty().off("*");
 
         addSettingsToggle(currentNode, "arpaScaleWeighting", "Scale weighting with progress", "Projects weighting scales  with current progress, making script more eager to spend resources on finishing nearly constructed projects.");
+        addSettingsToggle(currentNode, "arpaDemandWhole", "Demand whole project", "When there is an active trigger for a project, this will prioritize resources for the full set of all remaining steps instead of just the current step size.");
         addSettingsNumber(currentNode, "arpaStep", "Preferred progress step", "Projects will be weighted and build in this steps. Increasing number can speed up constructing. Step will be adjusted down when preferred step above remaining amount, or surpass storage caps. Weightings below will be multiplied by current step. Projects builded by triggers will always have maximum possible step.");
 
         currentNode.append(`
@@ -20203,8 +20204,7 @@ declare global {
             }
 
             let blockKnowledge = true;
-            // TODO: Only relevant for ARPAs and focus on full project cost/current step only should be a setting
-            let priorityTargetCost = priorityTarget.fullRemainingCost ? priorityTarget.fullRemainingCost : priorityTarget.cost;
+            let priorityTargetCost = (settings.arpaDemandWhole && priorityTarget.fullRemainingCost) ? priorityTarget.fullRemainingCost : priorityTarget.cost;
             for (let res in priorityTargetCost) {
                 if (res !== "Knowledge" && resources[res].currentQuantity < priorityTargetCost[res]) {
                     blockKnowledge = false;

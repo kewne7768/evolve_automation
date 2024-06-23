@@ -1270,6 +1270,7 @@
             super(name, "arpa", id, "");
             this._vueBinding = "arpa" + this.id;
             this.currentStep = 1;
+            this.fullRemainingCost = {};
         }
 
         get autoBuildEnabled() { return settings['arpa_' + this._id] }
@@ -1283,7 +1284,9 @@
             }
 
             this.cost = {};
-            let maxStep = Math.min(100 - this.progress, state.allTriggerlikeTargets.includes(this) ? 100 : settings.arpaStep);
+            this.fullRemainingCost = {};
+            let remainingSteps = 100 - this.progress;
+            let maxStep = Math.min(remainingSteps, state.allTriggerlikeTargets.includes(this) ? 100 : settings.arpaStep);
 
             let adjustedCosts = poly.arpaAdjustCosts(this.definition.cost);
             for (let resourceName in adjustedCosts) {
@@ -1291,6 +1294,7 @@
                     let resourceAmount = Number(adjustedCosts[resourceName]());
                     if (resourceAmount > 0) {
                         this.cost[resourceName] = resourceAmount / 100;
+                        this.fullRemainingCost[resourceName] = this.cost[resourceName] * remainingSteps;
                         maxStep = Math.min(maxStep, resources[resourceName].maxQuantity / this.cost[resourceName]);
                     }
                 }
@@ -13609,13 +13613,11 @@ declare global {
         if (prioritizedTasks.length > 0) {
             for (let i = 0; i < prioritizedTasks.length; i++){
                 let demandedObject = prioritizedTasks[i];
-                for (let res in demandedObject.cost) {
+                // TODO: Only relevant for ARPAs and focus on full project cost/current step only should be a setting
+                let demandCost = demandedObject.fullRemainingCost ? demandedObject.fullRemainingCost : demandedObject.cost;
+                for (let res in demandCost) {
                     let resource = resources[res];
-                    let quantity = demandedObject.cost[res];
-                    // Make an attempt to demand the entire project
-                    if (demandedObject instanceof Project && res !== "Knowledge") {
-                        quantity *= (100 - demandedObject.progress) / demandedObject.currentStep;
-                    }
+                    let quantity = demandCost[res];
                     resource.requestedQuantity = Math.max(resource.requestedQuantity, quantity);
                 }
             }
@@ -20179,14 +20181,16 @@ declare global {
             }
 
             let blockKnowledge = true;
-            for (let res in priorityTarget.cost) {
-                if (res !== "Knowledge" && resources[res].currentQuantity < priorityTarget.cost[res]) {
+            // TODO: Only relevant for ARPAs and focus on full project cost/current step only should be a setting
+            let priorityTargetCost = priorityTarget.fullRemainingCost ? priorityTarget.fullRemainingCost : priorityTarget.cost;
+            for (let res in priorityTargetCost) {
+                if (res !== "Knowledge" && resources[res].currentQuantity < priorityTargetCost[res]) {
                     blockKnowledge = false;
                     break;
                 }
             }
-            for (let res in priorityTarget.cost) {
-                if ((res !== "Knowledge" || blockKnowledge) && priorityTarget.cost[res] > resources[res].currentQuantity - action.cost[res]) {
+            for (let res in priorityTargetCost) {
+                if ((res !== "Knowledge" || blockKnowledge) && priorityTargetCost[res] > resources[res].currentQuantity - action.cost[res]) {
                     const resList = conflict.resList || [];
                     const actionList = conflict.actionList || [];
                     conflict = {res: resources[res], obj: priorityTarget, resList: [...new Set([...resList, res])], actionList: [...new Set([...actionList, priorityTarget.name])]};

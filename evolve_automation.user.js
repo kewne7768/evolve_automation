@@ -6197,7 +6197,7 @@
         }
 
         static #makeTriggerFn(snip) {
-            return (triggerable, allowedActions) => {
+            let fn = (triggerable, allowedActions) => {
                 if (triggerable instanceof Action || triggerable instanceof Technology) {
                     // Silently ignore triggers for not-unlocked buildings, like normal triggers do
                     if (typeof triggerable.isUnlocked === "function" && !triggerable.isUnlocked()) return;
@@ -6214,6 +6214,14 @@
                     });
                 }
             };
+            // trigger() but only if we have less than "amount" count.
+            // This is very frequently used so it's nice to have a helper function.
+            fn.amount = (triggerable, amount) => {
+                if (triggerable instanceof Action && triggerable.count < amount) {
+                    return fn(triggerable);
+                }
+            };
+            return fn;
         }
 
         static #makeStopRunningFn(snip) {
@@ -6459,28 +6467,42 @@ declare global {
 
     /** A place for your snippet to put any temporary data. Contents will be preserved between runs. */
     const snippetState: {[key: string|number]: any;};
-    /**
-     * Triggers an Action on your snippet's behalf.
-     * It will keep running until you stop making the trigger() call.
-     *
-     * Custom resource lists can be passed too.
-     * Custom resource lists can optionally include a list of permissible buildings that are allowed to spend those resources as second parameter.
-     * (Currently not possible on Actions.)
-     *
-     * @example Example: After Stargate built, build 50 attractors
-     * \`\`\`
-     * if (buildings.BlackholeStargateComplete.count && buildings.BadlandsAttractor.count < 50) {
-     *   trigger(buildings.BadlandsAttractor);
-     * }
-     * \`\`\`
-     *
-     * @example Custom resource list
-     * \`\`\`
-     * trigger({Mythril: 1000000}, [buildings.RedZiggurat, buildings.RuinsArchaeology]);
-     * \`\`\`
-     */
-    function trigger<T extends Action|Technology | ResourceList>(action: T): void;
-    function trigger<T extends ResourceList>(action: T, allowedActions?: (Action | Technology)[]|undefined): void;
+
+    // Trigger functions
+    const trigger: {
+        /**
+         * Triggers an Action on your snippet's behalf.
+         * It will keep running until you stop making the trigger() call.
+         *
+         * Custom resource lists can be passed too.
+         * Custom resource lists can optionally include a list of permissible buildings that are allowed to spend those resources as second parameter.
+         * (Currently not possible on Actions.)
+         *
+         * @example Example: After Stargate built, build 50 attractors
+         * \`\`\`
+         * if (buildings.BlackholeStargateComplete.count && buildings.BadlandsAttractor.count < 50) {
+         * trigger(buildings.BadlandsAttractor);
+         * }
+         * \`\`\`
+         *
+         * @example Custom resource list
+         * \`\`\`
+         * trigger({ Mythril: 1000000 }, [buildings.RedZiggurat, buildings.RuinsArchaeology]);
+         * \`\`\`
+         */
+        <T extends Action | Technology | ResourceList>(action: T): void;
+        <T extends ResourceList>(action: T, allowedActions?: (Action | Technology)[] | undefined): void;
+
+        /**
+         * Triggers an Action up to a given total building number count, inclusive.
+         * This should only be used for buildings and ARPAs. Don't use on research or custom resource lists.
+         * @example Black Hole, No Hole
+         * \`\`\`
+         * trigger.amount(projects.SuperCollider, 99);
+         * \`\`\`
+         */
+        amount<T extends Action>(action: T, count: number): void;
+    };
 
     /**
      * Stops running your snippet until the page is reloaded.

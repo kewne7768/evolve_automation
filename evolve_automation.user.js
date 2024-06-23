@@ -19329,7 +19329,51 @@ declare global {
         }
 
         // TODO: Put documentation or something.
-        const exampleScript = ``;
+        const exampleScript =
+`
+// Snippets are pieces of JavaScript that run every tick. They can be used in place of editing this script for many things.
+// They can also execute complex pieces of logic.
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript
+//
+// This code editor is based on Visual Studio Code's Monaco editor.
+// You can many of the following hotkeys:
+// https://code.visualstudio.com/shortcuts/keyboard-shortcuts-windows.pdf
+//
+// Of particular note is the autocompletion. Many functions and their arguments can be autocompleted by pressing ctrl-space.
+//
+// Snippets must call most of their functions _on each tick_.
+// This means you don't have to worry about cleanup.
+// A line of code like this will behave as expected, instead of making a large "queue":
+// if (buildings.RedZiggurat.count < 20) trigger(buildings.RedZiggurat);
+//
+// Special functions available include:
+// Triggers. These don't block each other for resources.
+// * trigger(buildings.RedZiggurat). Can be used to trigger buildings. Put in just the buildings. bit and press ctrl+space for autocomplete.
+// * trigger(techIds["tech-scarletite"]). Can be used to trigger technology. Put in just the "tech-" bit and press ctrl+space for autocomplete.
+// * trigger(projects.SuperCollider). Can be used to trigger ARPAs. Put in just the projects. bit and press ctrl+space for autocomplete.
+// * trigger(resourceList({Mythril: 1e5, Bolognium: 1e5})). Creates a custom trigger, demanding the resources and preventing them from being spent. Can be used to force crafting. An array can be passed as second argument, listing buildings allowed to spend those materials.
+// Helpers.
+// * once(() => { console.log("Hello!"); }); . Runs a function only once, unless the snippet is reset. The return value is cached and immediately returned after.
+// * daily(() => { console.log("Today's a day, today's a new day"); }); . Runs a function every in-game day. The return value is cached and immediately returned until a new day passes. Doesn't run during evolution.
+// * return stopRunning(); . Stops running your snippet. Note that snippets will be given a "second chance" after evolution.
+// UI.
+// Your snippet can have basic settings (toggles, numbers and strings only). These can have user overrides applied to them, too.
+// Autocomplete on the ui. object for more info.
+// Eval functions.
+// * _("Challenge", "lone_survivor")
+// These are the easiest way to do checks if you don't want to dig into the game data.
+// Advanced autocomplete is available for these, you can complete both available types and most arguments.
+// TIP: You can copy-paste these from the override dialog by clicking the E button on an override.
+//
+// Special behaviors include the ability to write to the settings object to create a special one-tick override.
+// This has higher priority than normal overrides, so use it with caution.
+// For example, you can briefly turn script features off by doing something like settings.autoJobs = false;
+//
+// If you want to store data between ticks, use the snippetState object.
+// Note that editing snippets or refreshing the page will reset the snippet and their state, so you should try to come up with a fallback.
+//
+// For samples, see: https://github.com/kewne7768/snippet-samples
+`;
 
         $("#script_snippet_add").on("click", (e) => {
             settingsRaw.snippets.push({id: SnippetManager.randomId(), title: "New Snippet", code: exampleScript, active: true});

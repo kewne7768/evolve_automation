@@ -6545,8 +6545,8 @@ declare global {
         isAffordable(max?: boolean): boolean;
         /** Whether the action is clickable is determined by whether it is unlocked, affordable and not a "permanently clickable" action */
         isClickable(): boolean;
-        /** ID value including location, as used in setting names, eg "space-space_barracks". */
-        settingId: string;
+        /** ID value including location, as used in setting names and override evals, eg "space-space_barracks". */
+        settingId: BuildingIdKey; // This is a bit of a lie, this is only true for buildings, but buildings use the general Action.
         /** Base no-location ID value, eg "space_barracks". */
         id: string;
         /** Script's name for the building, eg "Red Marine Barracks". */
@@ -6637,7 +6637,11 @@ declare global {
         galaxyMarketPriority: number;
 
         /** Resource treated as if more is required at high priority. */
-        isDemanded: boolean;
+        isDemanded(): boolean;
+        /** Resource production is meaningful. */
+        isUseful(): boolean;
+        /** Is visible. */
+        isUnlocked(): boolean;
 
         /** Many more properties and methods exist and aren't yet documented. */
         [key: string]: any;

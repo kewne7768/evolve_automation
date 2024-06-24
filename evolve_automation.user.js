@@ -13727,7 +13727,7 @@ declare global {
                         if (obj.isAffordable(true)) {
                             state.queuedTargets.push(obj);
                             if (queueSave) {
-                                state.conflictTargets.push({name: obj.title, cause: "Queue", cost: obj.cost});
+                                state.conflictTargets.push({name: obj.title, cause: "Queue", cost: settings.arpaDemandWhole && obj.fullRemainingCost ? obj.fullRemainingCost : obj.cost});
                             }
                         }
                     }
@@ -13757,7 +13757,7 @@ declare global {
                 if (obj) {
                     state.triggerTargets.push(obj);
                     if (triggerSave) {
-                        state.conflictTargets.push({name: obj.title, cause: "Trigger", cost: obj.cost});
+                        state.conflictTargets.push({name: obj.title, cause: "Trigger", cost: settings.arpaDemandWhole && obj.fullRemainingCost ? obj.fullRemainingCost : obj.cost});
                     }
                 }
             }
@@ -19193,7 +19193,7 @@ declare global {
         currentNode.empty().off("*");
 
         addSettingsToggle(currentNode, "arpaScaleWeighting", "Scale weighting with progress", "Projects weighting scales  with current progress, making script more eager to spend resources on finishing nearly constructed projects.");
-        addSettingsToggle(currentNode, "arpaDemandWhole", "Demand whole project", "When there is an active trigger for a project, this will prioritize resources for the full set of all remaining steps instead of just the current step size.");
+        addSettingsToggle(currentNode, "arpaDemandWhole", "Demand whole project", "When there is an active trigger for a project, this will prioritize resources for the full set of all remaining steps instead of just the current step size. Recommended for fast runs at high prestige levels.");
         addSettingsNumber(currentNode, "arpaStep", "Preferred progress step", "Projects will be weighted and build in this steps. Increasing number can speed up constructing. Step will be adjusted down when preferred step above remaining amount, or surpass storage caps. Weightings below will be multiplied by current step. Projects builded by triggers will always have maximum possible step.");
 
         currentNode.append(`
@@ -20204,6 +20204,7 @@ declare global {
             }
 
             let blockKnowledge = true;
+            // In most cases there will be a wrapper object in conflictTargets, so this is rarely used.
             let priorityTargetCost = (settings.arpaDemandWhole && priorityTarget.fullRemainingCost) ? priorityTarget.fullRemainingCost : priorityTarget.cost;
             for (let res in priorityTargetCost) {
                 if (res !== "Knowledge" && resources[res].currentQuantity < priorityTargetCost[res]) {

@@ -11682,7 +11682,9 @@ declare global {
 
         let estimatedTime = {};
         let affordableCache = {};
+        let consumptionsUsed = {};
         const isAffordable = (building) => (affordableCache[building._vueBinding] ?? (affordableCache[building._vueBinding] = building.isAffordable()));
+        const usesUsedConsumption = (building) => (building.consumption.some((c) => consumptionsUsed[c.resource._id]));
 
         // Loop through the auto build list and try to buy them
         buildingsLoop:
@@ -11691,6 +11693,11 @@ declare global {
 
             // Only go further if it's affordable building, and not current target
             if (ignoredList.includes(building) || !isAffordable(building)) {
+                continue;
+            }
+
+            // Results of buying multiple things using the same consumption/support in one tick are often bad
+            if (usesUsedConsumption(building)) {
                 continue;
             }
 
@@ -11790,10 +11797,10 @@ declare global {
             if (building.click()) {
                 // Only one building with consumption per tick, so we won't build few red buildings having just 1 extra support, and such
                 // Same for gems when we're saving them, and missions as they tends to unlock new stuff
-                // TODO: Allow build things with different consumtions
-                if (building.consumption.length > 0 || building.isMission() || (building.cost["Soul_Gem"] && settings.prestigeType === "whitehole" && settings.prestigeWhiteholeSaveGems)) {
+                if (building.isMission() || (building.cost["Soul_Gem"] && settings.prestigeType === "whitehole" && settings.prestigeWhiteholeSaveGems)) {
                     return;
                 }
+                building.consumption.forEach(c => consumptionsUsed[c._id] = true);
                 // Mark all processed building as unaffordable for remaining loop, so they won't appear as conflicting
                 for (let key in affordableCache) {
                     affordableCache[key] = false;

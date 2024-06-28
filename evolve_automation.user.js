@@ -6012,9 +6012,9 @@
                         continue;
                     }
 
-                    let code = this.#makeEval(snip);
-
                     try {
+                        let code = this.#makeEval(snip);
+
                         let result = code();
                         // typeof null is object??? Really, JS?
                         if (typeof result === "object" && result !== null) {
@@ -6185,6 +6185,9 @@
                 let once = (onceCode) => { let retVal = onceCode(); once = () => retVal; return retVal; }
                 return {[fnName]() { return ui.wrap(() => { \n${snip.code}\n });}};
             })`;
+            // https://firefox-source-docs.mozilla.org/devtools-user/debugger/how_to/debug_eval_sources/index.html
+            // We don't want to put this raw notation in here or browsers might get confused, split the token up in the middle.
+            executable += "\n//" + "# " + "sourceURL=snippet." + encodeURI(snip.title) + ".js\n";
             let fn = ((eval(executable)).apply(null, [
                 this.#makeTriggerFn(snip), // trigger() function. Pass an action and it will be triggered for one tick. You don't have to think about state.
                 this.#makeStopRunningFn(snip), // stopRunning() function. Stops running the snippet until its changed or the page is reloaded. Use for one-off script mod snippets.

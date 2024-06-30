@@ -6351,7 +6351,6 @@
         // based on how the user loads the userscript.
         static #monacoLoadCallback(callback) {
             const monacoFallbackUrl = "https://kewne7768.github.io/monaco-export/monaco-export.js";
-            let win = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
             win.monacoReadyHook = (win.monacoReadyHook ?? []);
             win.monacoReadyHook.push(() => { callback(); });
             if (!win.monacoReadyHook?.isReady && !this._initiatedMonacoLoad) {
@@ -6845,7 +6844,6 @@ declare global {
             }
             this._unloadEventRegistered = newState;
 
-            let win = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
             if (newState) {
                 win.addEventListener("beforeunload", this._beforeUnloadEvent);
             }
@@ -6870,7 +6868,6 @@ declare global {
             // Cancel button
             $('<button style="font-size: 32px">Cancel</button>').appendTo(bigModal).on("click", () => {
                 this.finishSession();
-                let win = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
                 if (win.monacoReadyHook?.splice) win.monacoReadyHook.splice();
             });
             bigModal.append(loadingPlaceholder).appendTo(document.body);

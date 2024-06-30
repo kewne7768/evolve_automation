@@ -8352,6 +8352,7 @@ declare global {
             buildingsIgnoreZeroRate: false,
             buildingsLimitPowered: true,
             buildingTowerSuppression: 100,
+            buildingBuildPassCount: 1,
             buildingConsumptionCheck: "onePerTick",
             buildingsTransportGem: false,
             buildingsBestFreighter: false,
@@ -11711,11 +11712,12 @@ declare global {
         }
     }
 
-    function autoBuild() {
+    function autoBuild(noIgnore) {
+        let buildCount = 0;
         BuildingManager.updateWeighting();
         ProjectManager.updateWeighting();
 
-        let ignoredList = [...state.queuedTargets, ...state.allTriggerlikeTargets];
+        let ignoredList = noIgnore ? [] : [...state.queuedTargets, ...state.allTriggerlikeTargets];
         let buildingList = [...BuildingManager.managedPriorityList(), ...ProjectManager.managedPriorityList()];
 
         // Sort array so we'll have prioritized buildings on top. We'll need that below to avoid deathlocks, when building 1 waits for building 2, and building 2 waits for building 3. That's something we don't want to happen when building 1 and building 3 doesn't conflicts with each other.
@@ -11841,9 +11843,10 @@ declare global {
 
             // Build building
             if (building.click()) {
+                buildCount++;
                 // Same for gems when we're saving them, and missions as they tends to unlock new stuff
                 if (building.isMission() || (building.cost["Soul_Gem"] && settings.prestigeType === "whitehole" && settings.prestigeWhiteholeSaveGems)) {
-                    return;
+                    return buildCount;
                 }
                 // Only one building with consumption per tick, so we won't build few red buildings having just 1 extra support, and such
                 // Buildings that add support (negative rate) don't count
@@ -11858,6 +11861,7 @@ declare global {
                 }
             }
         }
+        return buildCount;
     }
 
     function getTechConflict(tech) {
@@ -14848,6 +14852,30 @@ declare global {
         }
         if (settings.autoMutateTraits) {
             autoMutateTrait();
+        }
+
+        // Extra autoBuild passes. As the default is 1, these will usually not run, and the feature is marked as dangerous, so users can expect some breakage.
+        // This is very dangerous; we need to update data from the game *and* let the user's overrides update again (eg so that disabling a building's autobuild if building count >= 2 works).
+        // But we only care about the autoBuild toggle & building/project toggles/max/weighting. No other overrides will be used.
+        // Hopefully, users only set things covered by updated debug data & building/project updates.
+        // It would be neat to only update those overrides, but that opens up a whole different set of problems.
+        // Also, there is no need to do this if we're resetting or in evolution.
+        if (state.goal === "Standard") {
+            for (let i = 1; i < settings.buildingBuildPassCount; ++i) {
+                updateDebugData();
+                BuildingManager.updateBuildings();
+                ProjectManager.updateProjects();
+
+                updateOverrides();
+                SnippetManager.updateOverridesAndUi();
+
+                if (!settings.autoBuild) break;
+
+                // Try to run autoBuild until it returns 0 buildings built.
+                // We ignore the trigger/queue ignore list, because.
+                let built = autoBuild(true);
+                if (built === 0) break;
+            }
         }
 
         KeyManager.finish();
@@ -19018,6 +19046,8 @@ declare global {
             { val: "unlimited", label: "Unlimited", hint: "Do not pay attention to support/upkeep requirements. This will cause bugs and undesirable behavior as it can easily exceed the maximum support. But, at extremely high prestige levels, this may be required. (Example: Can buy 1 Living Quarters + 1 Mine + 1 Fabrication + 1 Biodome in a single tick even if there is only 2 support left.)" },
         ];
         addSettingsSelect(currentNode, "buildingConsumptionCheck", "Behavior when building support/upkeep-using building", "By default, the script only buys one building with support or upkeep requirement per tick, to allow automatic weightings to work optimally.", consumptionOptions);
+
+        addSettingsNumber(currentNode, "buildingBuildPassCount", "(Dangerous) Number of times to run autoBuild each tick", "Attempts to run autoBuild this many times. Numbers lower than 1 will have no effect; disable autoBuild instead. At high prestige levels, this may increase the speed of building. Expect potential bugs as this will evaluate overrides under different conditions than normal. High numbers may help build up the MAD phase very quickly, but after that, it is recommended to put this as low as possible.");
 
         currentNode.append(`
           <div><input id="script_buildingSearch" class="script-searchsettings" type="text" placeholder="Search for buildings..."></div>

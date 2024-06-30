@@ -6819,11 +6819,22 @@ declare global {
             let t = SnippetEditorManager; // Not bound, can't .bind because we need the same function.
             if (t._currentlyEditingMonaco && t._currentlyEditingSnippet) {
                 let editorText = t._currentlyEditingMonaco.getValue();
-                if (editorText !== t._currentlyEditingSnippet.code) {
-                    // TODO: No UI to retrieve this...
+                if (editorText !== t._currentlyEditingSnippet.code && editorText.length) {
                     localStorage.setItem("EvolveScriptSnippetEditPrecloseBackup", editorText);
-                    e.returnValue = "Close editor with unsaved changes?";
-                    e.preventDefault();
+                    // In Firefox, calling beforeunload -> preventDefault and having the user reject it REALLY breaks the game's prestiges very very badly,
+                    // until the tab is closed and remade. Even persists across refreshes and disabling the script entirely!
+                    // So it's OK, we make a backup anyway.
+                    //
+                    // In particular: the web worker does very weird things (game thinks it works but it stops sending ticks)
+                    // and the page self-refreshes are automatically cancelled meaning you need to F5 manually.
+                    // This breaks prestiges, but even buttons like restore backup become dysfunctional.
+                    // This might be a Firefox bug, it is documented that beforeunload may break caching.
+                    // But it only seems to really break if preventDefault or returnValue is used to make the user confirm.
+                    // Especially if the user says no, that's almost 100% reliable.
+                    // (This was a fun one to debug. Leaving this note here because having a reject dialog seems like an obvious addition.)
+                    // (TODO: Transform into visibilitychange or timer based backup instead.)
+                    //e.returnValue = "Close editor with unsaved changes?";
+                    //e.preventDefault();
                 }
             }
         }
@@ -19411,8 +19422,7 @@ declare global {
 
         // TODO: Put documentation or something.
         const exampleScript =
-`
-// Snippets are pieces of JavaScript that run every tick. They can be used in place of editing this script for many things.
+`// Snippets are pieces of JavaScript that run every tick. They can be used in place of editing this script for many things.
 // They can also execute complex pieces of logic.
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript
 //

@@ -6352,6 +6352,13 @@
         // based on how the user loads the userscript.
         static #monacoLoadCallback(callback) {
             const monacoFallbackUrl = "https://kewne7768.github.io/monaco-export/monaco-export.js";
+            // If running in UserScript sandbox, the userscript extension may put the pre-loaded Monaco in the "safe" window context only.
+            // In that case, `win` will point to the unsafeWindow.
+            // This is fine, but the hook would end up in the unsafeWindow if dynamic load is needed.
+            // So, if that happened, we copy the hook from the safe window to the unsafeWindow.
+            if (needSandboxBypass && window.monacoReadyHook && !unsafeWindow.monacoReadyHook) {
+                unsafeWindow.monacoReadyHook = window.monacoReadyHook;
+            }
             win.monacoReadyHook = (win.monacoReadyHook ?? []);
             win.monacoReadyHook.push(() => { callback(); });
             if (!win.monacoReadyHook?.isReady && !this._initiatedMonacoLoad) {
@@ -14926,6 +14933,10 @@ declare global {
             poly.loc = game.loc;
             poly.messageQueue = game.messageQueue;
             poly.shipCosts = game.shipCosts;
+        }
+        else {
+            console.info("Warning: Script is running in UserScript sandbox. This results in lower performance and potential bugs.");
+            console.info("Your UserScript extension may have settings to disable this.");
         }
 
         addScriptStyle();

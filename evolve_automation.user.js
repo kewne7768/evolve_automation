@@ -8022,7 +8022,7 @@ declare global {
             prioritizeSnippetTriggers: "savereq",
             prioritizeQueue: "savereq",
             prioritizeUnify: "savereq",
-            prioritizeOuterFleet: "ignore",
+            prioritizeOuterFleet: "savereq",
             buildingAlwaysClick: false,
             buildingClickPerTick: 50,
             activeTargetsUI: false,

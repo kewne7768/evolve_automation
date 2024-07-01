@@ -10987,14 +10987,6 @@ declare global {
                         break;
                     }
 
-                    // HACK: Force "excess" for Elerium ejecting when in Antimatter
-                    // With too much prestige, Elerium storage never fills in AM, making the black hole totally useless
-                    // Infernite is too valuable to dump like this (messes with Alien Gift)
-                    //  || resource === resources.Infernite
-                    if (game.global.race.universe === 'antimatter' && m === EjectManager && (resource === resources.Elerium)) {
-                        consumeRatio = -1;
-                    }
-
                     if (!m.resEnabled(resource.id) || resource.isDemanded()) {
                         continue;
                     }

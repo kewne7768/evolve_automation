@@ -5967,12 +5967,14 @@
 
         static #evalCache = {};
         static _executionStopped = new Set();
+        static _executionErrored = new Set();
         static #lastRunData = {};
         static _overrides = {};
 
         // Key is snippet ID.
         static _snippetUiDef = {};
         static _snippetUiRedraw = true;
+        static _snippetUiIndicatorRedraw = true;
 
         static #evolutionPhaseComplete = false;
 
@@ -5982,7 +5984,7 @@
             this.customResourceDemands = [];
             this._overrides = {};
 
-            // Snippets run during evolution, but we reset the stopRunning() state one time after leaving it.
+            // Snippets run during evolution, but we reset the stopRunning() state one time after leaving it, at least for non-broken snippets.
             // Most users probably won't think of the evolution phase, but some might want to script it to choose a run type.
             // This creates a much more ergonomic API for challenge checks.
             // Otherwise, snippets like if(!cataclysm) stopRunning() would look like they work while the user is developing them
@@ -5990,7 +5992,7 @@
             if (!this.#evolutionPhaseComplete) {
                 this.#evolutionPhaseComplete = state.goal !== "Evolution";
                 if (this.#evolutionPhaseComplete) {
-                    this._executionStopped.clear();
+                    this._executionStopped = new Set(this._executionErrored);
                 }
             }
 
@@ -6026,6 +6028,8 @@
                         console.error("Snippet [%s] error: %o", snip.title, e);
                         // Stop until user does something to fix it.
                         this._executionStopped.add(snip.id);
+                        this._executionErrored.add(snip.id);
+                        this._snippetUiIndicatorRedraw = true;
                         let msg = `Snippet [${snip.title}] error: ${e}. See the browser console for more information.`;
                         GameLog.logDanger("special", msg, ['events', 'major_events']);
                     }
@@ -6037,6 +6041,10 @@
 
             if (this._snippetUiRedraw) {
                 this.redrawSnippetUI();
+            }
+
+            if (this._snippetUiIndicatorRedraw) {
+                this.updateSnippetIndicators();
             }
         }
 
@@ -6084,11 +6092,13 @@
             const snipId = snip.id;
             // Deleting the eval cache will make new copies of many of its objects.
             delete this.#evalCache[snipId];
-            // Undo stopRunning() effect
+            // Undo stopRunning() effect and error effect
             this._executionStopped.delete(snipId);
+            this._executionErrored.delete(snipId);
             // Delete UI and force redraw
             delete this._snippetUiDef[snipId];
             this._snippetUiRedraw = true;
+            this._snippetUiIndicatorRedraw = true;
         }
 
         static checkSyntax(functionCode) {
@@ -6112,6 +6122,20 @@
             Object.entries(this._overrides).forEach(([k, v]) => {
                 settings[k] = v;
             });
+        }
+
+        static updateSnippetIndicators() {
+            this._snippetUiIndicatorRedraw = false;
+            $(".script-snippet-title-indicators").html("");
+            for (let i = 0; i < settingsRaw.snippets.length; ++i) {
+                let snip = settingsRaw.snippets[i];
+                let indicator = "";
+                if (this._executionStopped.has(snip.id)) indicator += `<span title="stopRunning() was called. Snippet is not running.">🧊</span>`;
+                if (this._executionErrored.has(snip.id)) indicator += `<span title="Snippet encountered an error. Snippet is not running.">⚠️</span>`;
+                if (indicator !== "") {
+                    $(`#script-snippets---${i} .script-snippet-title-indicators`).html(` ${indicator}`);
+                }
+            }
         }
 
         static redrawSnippetUI() {
@@ -6230,6 +6254,7 @@
 
         static #makeStopRunningFn(snip) {
             return () => {
+                this._snippetUiIndicatorRedraw = true;
                 this._executionStopped.add(snip.id);
             };
         }
@@ -19419,7 +19444,7 @@ declare global {
             <tr>
               <th class="has-text-warning" style="width: 60px">&nbsp;</th>
               <th class="has-text-warning">Title</th>
-              <th class="has-text-warning" style="width: 120px">&nbsp;</th>
+              <th class="has-text-warning" style="width: 140px">&nbsp;</th>
             </tr>
             <tbody id="script_snippetTableBody"></tbody>
           </table>`);
@@ -19429,17 +19454,18 @@ declare global {
         for (let i = 0; i < settingsRaw.snippets.length; i++) {
             const snippet = settingsRaw.snippets[i];
             let node = $(`
-            <tr data-idx="${i}" class="script-draggable" style="height: 40px">
-                <td class="snippet-toggle"></td>
-                <td>${snippet.title}</td>
+            <tr data-idx="${i}" class="script-draggable" id="script-snippets---${i}" style="height: 40px">
+                <td class="script-snippet-toggle"></td>
+                <td class="script-snippet-title">${snippet.title}</td>
                 <td class="script-buttons">
-                    <a class="edit-button button is-dark is-small" style="margin: -4px 0 0 0; padding: 1px 12px;">✎</button>
-                    <a class="delete-button button is-dark is-small" style="margin: -4px 0 0 8px; padding: 1px 12px;">X</button>
+                    <button class="edit-button button is-dark is-small" style="margin: -4px 0 0 0; padding: 1px 12px;">✎</button>
+                    <button class="delete-button button is-dark is-small" style="margin: -4px 0 0 8px; padding: 1px 12px;">X</button>
+                    <span class="script-snippet-title-indicators"></span>
                 </td>
             </tr>
             `);
             node.find("td").css("padding-bottom", "0.35em");
-            addTableToggle(node.find(".snippet-toggle"), `snippets---${i}---active`, getOverrideModalPathHandler(['snippets', i, 'active'], ['snippets', i, 'activeOverrides']));
+            addTableToggle(node.find(".script-snippet-toggle"), `snippets---${i}---active`, getOverrideModalPathHandler(['snippets', i, 'active'], ['snippets', i, 'activeOverrides']));
             tableBodyNode.append(node);
         }
 
@@ -19551,6 +19577,7 @@ declare global {
             },
         });
 
+        SnippetManager.updateSnippetIndicators();
         SnippetManager.redrawSnippetUI();
         addSettingsHeader1(currentNode, "Custom Settings");
         currentNode.append(SnippetManager.settingsUIRoot);

@@ -14881,6 +14881,10 @@ declare global {
         if (state.goal === "Standard") {
             for (let i = 1; i < settings.buildingBuildPassCount; ++i) {
                 updateDebugData();
+                // Need to update Support resources, mostly, as we don't always track changes to those.
+                for (let id in resources) {
+                    resources[id].updateData();
+                }
                 BuildingManager.updateBuildings();
                 ProjectManager.updateProjects();
 
@@ -14888,6 +14892,9 @@ declare global {
                 SnippetManager.updateOverridesAndUi();
 
                 if (!settings.autoBuild) break;
+
+                // Need to update conflictTargets so we don't conflict with a just-built trigger.
+                updatePriorityTargets();
 
                 // Try to run autoBuild until it returns 0 buildings built.
                 // We ignore the trigger/queue ignore list, because.

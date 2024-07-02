@@ -6104,7 +6104,7 @@
         static checkSyntax(functionCode) {
             // Simple eval check without the cache
             try {
-                eval(`(function() { \n${functionCode}\n })`);
+                eval(`(function() { "use strict"; \n${functionCode}\n })`);
             }
             catch(e) {
                 return e;
@@ -6208,7 +6208,7 @@
                 let _daily_ret = undefined;
                 const daily = (dailyCode) => { if (game.global.race.species === "protoplasm") return null; if (game.global.stats.days !== _daily_last) { _daily_last = game.global.stats.days; _daily_ret = dailyCode(); } return _daily_ret; }
                 let once = (onceCode) => { let retVal = onceCode(); once = () => retVal; return retVal; }
-                return {[fnName]() { return ui.wrap(() => { \n${snip.code}\n });}};
+                return {[fnName]() { return ui.wrap(() => { "use strict"; \n${snip.code}\n });}};
             })`;
             // https://firefox-source-docs.mozilla.org/devtools-user/debugger/how_to/debug_eval_sources/index.html
             // We don't want to put this raw notation in here or browsers might get confused, split the token up in the middle.

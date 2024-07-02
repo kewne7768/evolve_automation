@@ -6966,6 +6966,339 @@ declare global {
         }
     }
 
+    /*
+     * Target schema for Evolve_UserScript_PrestigeDB:
+     * - resets: [{
+     * date: 12345 // Date.now(): Unix timestamp in milliseconds
+     * reset: 1234 // ingame reset count
+     * days: 12345 // game days
+     * prestigeType: "ascension" // same as script
+     * alevel: 1|2|3|4|5 // 0*-4*, same as game/script
+     * species: "custom" // species id
+     * customSpeciesName: null | "Wisp" // IF species is set to custom, the name of the custom species used. null for non-custom
+     * note: "Wow, this one sucked." | null // User-inputted note
+     * graphExclude: false // If true, filters from graph displays, set by user in TBD UI to remove bad/special/etc runs
+     * logString: "Reset: Ascension, Species: Custom" // user-customized string
+     * milestones: { "tech-merchandising": 1234, "TouristCenter": 2345 } // may be empty, too
+     * stars: ["junk_gene"] // TBD but intended to be for the alevel-providing challenges
+     * challenges: ["steelen", "joyless"] // TBD but intended to be for other challenges (this is split for filtering purposes). Recorded at end of run.
+     * rewards: {} // NYI
+     * extra: {} // TBD but some kind of extension mechanism?
+     * }, more of that]
+     * For future notes: no object key will ever start with "x".
+     *
+     * Markers exist for the user UI only. They're a way to store dateStart.
+     * These can be prestigeType bound.
+     * This is NYI but the plan is to make it something like this:
+     * markers: [{
+     * id: 1 // autoassigned
+     * dateStart: 12345 // starting at Unix timestamp in milliseconds
+     * prestigeType: "ascension" | null // Some markers are only relevant for a given prestigeType
+     * name: "Went to magic" // User-inputted name
+     * note: "Trying magic T4 farm" // User-inputted note
+     * }, more of that]
+     * For future notes: no object key will ever start with "x".
+    */
+
+    // Wow, IndexedDB sure is an API...
+    // Everything is async. This is very problematic for us, because we have little time when we want to add a prestige reset,
+    // due to the game refreshing at that very same time.
+    // It will *probably* complete in time, but who knows? And it would really suck to lose it...
+    // So: we stuff it into localStorage (synchronous, should delay the attempt to reload the page).
+    // We also *try* to commit it, and if we succeeded, we delete the entry in localStorage.
+    // If we don't make it, we commit it on the next start.
+    class PrestigeDBManager {
+        static _using = false;
+        static _openDB = null;
+        static _openDBRequest = null;
+        static _propertyHooks = {};
+
+        static _handleError(e) {
+            console.error("PrestigeDB: %o", e);
+        }
+
+        static init() {
+            if (!this._using && settingsRaw.prestigeDBenabled) {
+                this._using = true;
+                this.open();
+            }
+        }
+
+        static open() {
+            // Request data persist. If the user declines, too bad for them, I guess.
+            navigator.storage.persist();
+
+            this._openDBRequest = win.indexedDB.open("Evolve_UserScript_PrestigeDB", 1);
+            this._openDBRequest.onerror = this._handleError;
+            // So first you open it with a higher version number and _then_ you assign the event handler.
+            // Nowhere in the docs is this mentioned as a completely stupid thing.
+            this._openDBRequest.onupgradeneeded = (e) => {
+                const db = this._openDBRequest.result;
+                db.onerror = this._handleError;
+                db.onabort = this._handleError;
+
+                console.log("PrestigeDB: Upgrading version from %d to %d.", e.oldVersion, e.newVersion);
+                let currentVersion = e.oldVersion;
+
+                // It starts at 0, so 0 -> 1 is initial creation.
+                if (currentVersion < 1) {
+                    const resetsStore = db.createObjectStore("resets", {
+                        autoIncrement: true,
+                    });
+                    resetsStore.createIndex("reset", "reset");
+                    resetsStore.createIndex("date", "date");
+                    resetsStore.createIndex("prestigeType", "prestigeType");
+
+                    // Markers: User-inserted markers. They live at a dateStart, used to indicate a change made between resets after that date.
+                    // Can be used to filter arbitrary periods.
+                    const markersStore = db.createObjectStore("markers", {
+                        autoIncrement: true,
+                    });
+                    markersStore.createIndex("dateStart", "dateStart");
+                    markersStore.createIndex("prestigeType", "prestigeType");
+
+                    currentVersion = 1;
+                }
+            };
+            this._openDBRequest.onsuccess = (e) => {
+                this._openDB = this._openDBRequest.result;
+                this._openDBRequest = null;
+
+                // All errors bubble up to here. This is like the one sane decision they made with IndexedDB.
+                this._openDB.onerror = this._handleError;
+                this._openDB.onabort = this._handleError;
+                // Try to handle onclose as best as we can, but this should never happen unless the user deletes site data, which sucks to be them I guess.
+                this._openDB.onclose = (e) => {
+                    this._handleError(e);
+                    this._openDB = null;
+                    console.warn("PrestigeDB is broken for the remainer of this session.");
+                };
+                // Try to commit the log from the previous session
+                this._tryCommitLog();
+            };
+        }
+
+        // Exists for debugging only. Can't cancel an in-flight open request.
+        static close() {
+            if (this._openDB) this._openDB.close();
+            this._openDB = null;
+            this._openDBRequest = null;
+        }
+
+        static wipeEverything() {
+            if (this._openDB) this._openDB.close();
+            win.indexedDB.deleteDatabase("Evolve_UserScript_PrestigeDB");
+        }
+
+        static _tryCommitLog() {
+            let item = localStorage.getItem("Evolve_UserScript_PrestigeDBNext");
+            if (this._openDB && item) {
+                let entry = JSON.parse(item);
+                let transact = this._openDB.transaction("resets", "readwrite");
+                let store = transact.objectStore("resets");
+                // First, try to see if this reset # is already in the store.
+                // If so, update that one (user may have done restore backup).
+                let index = store.index("reset");
+                let request = index.getKey(entry.reset);
+                // If the key is not found then request.result will be some type of undefined.
+                // In Firefox it's not present on the object at all but the specification is useless so who knows what it's like elsehwere.
+                // Just assume undefined is non-present.
+                request.onsuccess = (e) => {
+                    if (request.result !== undefined) {
+                        store.put(entry, request.result);
+                    }
+                    else {
+                        store.add(entry);
+                    }
+                    transact.oncomplete = (e) => {
+                        // Should be safe to remove the localStorage item once committed.
+                        localStorage.removeItem("Evolve_UserScript_PrestigeDBNext");
+                    };
+                    // Try to commit early.
+                    transact.commit();
+                };
+            }
+        }
+
+        static createEntry(logString) {
+            // enabled check purposefully checks raw as overrides are not supported
+            if (!settingsRaw.prestigeDBenabled || !settings.prestigeDBlog) return;
+
+            let resetEntry = {
+                date: Date.now(),
+                reset: game.global.stats.reset,
+                days: game.global.stats.days,
+                prestigeType: settings.prestigeType,
+                alevel: game.alevel(),
+                species: game.global.race.species,
+                customSpeciesName: game.global.race.species === "custom" ? game.races.custom?.name : null,
+                note: null,
+                graphExclude: false,
+                logString: logString,
+                stars: this._getCurrentStars(),
+                challenges: this._getCurrentChallenges(),
+                // These are for hooks to overwrite and fill in! But these are fallbacks.
+                milestones: {}, // key is some arbitrary milestone, value is day
+                rewards: {}, // key is reward name earned, value is amount
+                extra: {}, // place to store whatever your heart desires
+            };
+
+            // Let snippets do things (via evil hacks, but OK... maybe a proper handler system can come later)
+            let hookResults = Object.fromEntries(Object.entries(this._propertyHooks).map(([prop, fn]) => { return [prop, fn(resetEntry)]; }));
+            Object.assign(resetEntry, hookResults);
+
+            // In case we don't make it in time or the DB is closed for some reason, set it in localStorage (this is synchronous).
+            localStorage.setItem("Evolve_UserScript_PrestigeDBNext", JSON.stringify(resetEntry));
+            // Try committing that, best-effort!
+            this._tryCommitLog();
+        }
+
+        static registerHook(targetProperty, fn) {
+            if (typeof fn !== "function") throw `${fn} must be a function`;
+            this._propertyHooks[targetProperty] = fn;
+        }
+        static unregisterHook(targetProperty) {
+            delete this._propertyHooks[targetProperty];
+        }
+
+        static _getCurrentStars() {
+            // from achieve.js:alevel()
+            const allStars = ['no_plasmid', 'no_trade', 'no_craft', 'no_crispr', 'weak_mastery', 'nerfed', 'badgenes'];
+            return allStars.filter(star => !!game.global.race[star]);
+        }
+
+        static _getCurrentChallenges() {
+            let stars = this._getCurrentStars();
+            return challenges.flat().map(a => a.trait).filter(chal => game.global.race[chal] && !stars.includes(chal));
+        }
+
+        // Get an array of all prestiges meeting the filter criteria.
+        // Not responsible for any kind of stat manipulation, etc, just raw data that meets the filters.
+        static getPrestiges(filterCfg) {
+            // These are all inclusive.
+            let filter = Object.assign({
+                minDate: -Infinity,
+                maxDate: Infinity,
+                prestigeType: null, // Pass a prestigeType to remove others
+                minReset: -Infinity,
+                maxReset: Infinity,
+                minDays: -Infinity,
+                maxDays: Infinity,
+                minAlevel: -Infinity,
+                maxAlevel: Infinity,
+                filterGraphExclude: false, // Pass true to filter graphExclude entries
+            }, filterCfg);
+            return new Promise((resolve, reject) => {
+                if (!this._openDB) { return reject("Database not opened"); }
+
+                let transaction = this._openDB.transaction(["resets"], "readonly");
+                let resetsStore = transaction.objectStore("resets");
+
+                let request;
+                if (filter.prestigeType) {
+                    let index = resetsStore.index("prestigeType");
+                    request = index.getAll(filter.prestigeType);
+                }
+                else {
+                    request = resetsStore.getAll();
+                }
+
+                request.onsuccess = () => {
+                    let unfiltered = request.result;
+                    let filtered = unfiltered.filter(entry => {
+                        if (entry.date < filter.minDate || entry.date > filter.maxDate) return false;
+                        if (filter.prestigeType && filter.prestigeType !== entry.prestigeType) return false;
+                        if (entry.reset < filter.minReset || entry.reset > filter.maxReset) return false;
+                        if (entry.days < filter.minDays || entry.days > filter.maxDays) return false;
+                        if (entry.alevel < filter.minAlevel || entry.alevel > filter.maxAlevel) return false;
+                        if (filter.filterGraphExclude && (!!entry.graphExclude)) return false;
+                        return true;
+                    });
+                    resolve(filtered);
+                };
+                request.onerror = (e) => {
+                    reject(e);
+                };
+            });
+        }
+
+        static async uiDownloadAll() {
+            let entries = await this.getPrestiges({});
+            let json = JSON.stringify({entries}, undefined, 2);
+            triggerFileDownload(json, "evolve-prestigedb.json");
+        }
+
+        static async uiGraphs() {
+            // We need the thing to be visible first so we can't use the builder function.
+            // Otherwise Chart.js doesn't like it.
+            // Annoying.
+            let modalBody;
+            openOptionsModal("WIP graph (no options yet)", (b) => { modalBody = b; });
+
+            modalBody.html("Waiting for data to load...");
+            let entries = await this.getPrestiges({
+                filterGraphExclude: true,
+            });
+
+            modalBody.html("");
+            let canvas = $(`<canvas id="script-prestigedb-canvas" style="width: 400px; height: 300px">`).appendTo(modalBody);
+
+            const pluckEm = (entries, property) => entries.map(e => e[property]);
+
+            // Returns an array of strings.
+            const renderEntryTooltip = (entry) => {
+                return [
+                    `Reset #${entry.reset}: ${entry.days} days, ${entry.alevel-1}* ${entry.prestigeType} [${entry.stars.join(', ')}]`,
+                    `Species: ${entry.species === 'custom' ? entry.customSpeciesName : entry.species}`,
+                    `${entry.logString??'More stuff goes here I guess'}`,
+                ];
+            };
+
+            const config = {
+                type: "line",
+                data: {
+                    labels: pluckEm(entries, "reset"),
+                    datasets: [
+                        {
+                            label: "Days",
+                            data: pluckEm(entries, "days"),
+                            borderColor: "hotpink", // TODO grab good colors from user theme or something
+                        },
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: 'Resets to Days'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterBody: (ti) => {
+                                    let strs = [];
+                                    // This can in theory show multiple points in the same tooltip or something like that
+                                    for (let tooltip of ti) {
+                                        let entry = entries[tooltip.dataIndex];
+                                        strs.push(...renderEntryTooltip(entry));
+                                    }
+                                    return strs;
+                                }
+                            }
+                        }
+                    }
+                }
+
+            };
+
+            let chart = new Chart(canvas, config);
+            this._chart = chart; // for debugging only really, leaks
+        }
+    }
+
     var WindowManager = {
         openedByScript: false,
         _callbackWindowTitle: "",
@@ -8603,6 +8936,8 @@ declare global {
             hellTurnOffLogMessages: true,
             logFilter: "",
             logEnabled: true,
+            prestigeDBenabled: false,
+            prestigeDBlog: true,
         }
         Object.keys(GameLog.Types).forEach(id => def["log_" + id] = true);
         def["log_mercenary"] = false;
@@ -11156,7 +11491,9 @@ declare global {
         placeholders.timeStamp = game.global.stats.days;
         placeholders.species = game.global.race.species.charAt(0).toUpperCase() + game.global.race.species.slice(1);
 
-        GameLog.logInfo("prestige", formatLogString(settings.log_prestige_format, placeholders), ['achievements']);
+        const logString = formatLogString(settings.log_prestige_format, placeholders);
+        GameLog.logInfo("prestige", logString, ['achievements']);
+        PrestigeDBManager.createEntry(logString);
     }
 
     function autoPrestige() {
@@ -14999,6 +15336,9 @@ declare global {
         initialiseScript();
         updateOverrides();
         SnippetManager.prepSnippets();
+
+        // Purposefully checks raw as prestigeDBenabled doesn't support overrides.
+        if (settingsRaw.prestigeDBenabled) { PrestigeDBManager.init(); }
 
         // Hook to game loop, to allow script run at full speed in unfocused tab
         const setCallback = (fn) => !needSandboxBypass ? fn : exportFunction(fn, unsafeWindow);
@@ -19627,6 +19967,29 @@ declare global {
             this.value = settingsRaw.logFilter;
             updateSettingsFromState();
         });
+
+        // These buttons will misbehave entirely if the DB feature is disabled, as the indexedDB won't be open.
+        // And that requires permissions to persist properly, and we don't want to bother users that don't want it.
+        // Easy fix: Only render them if the feature is enabled.
+        const initPrestigeDB = () => {
+            if (settingsRaw.prestigeDBenabled) {
+                PrestigeDBManager.init();
+            }
+        };
+        addSettingsHeader1(currentNode, "Prestige DB");
+        let enabledNode = addSettingsToggle(currentNode, "prestigeDBenabled", "Enable prestige database", "Keeps track of your prestige times in a database. Activating this setting may pop up a dialog asking for data storage permissions. Do not add an override to this setting, add it to the log setting instead.", initPrestigeDB, initPrestigeDB);
+        enabledNode.off("click"); // hack to prevent overrides, this is a technical setting only present because of the additional permissions required
+
+        // TODO: Hide all of this if the database has never been enabled.
+        let prestigeDBsection = $("<div>");
+        currentNode.append(prestigeDBsection);
+        addSettingsToggle(prestigeDBsection, "prestigeDBlog", "Log entries", "Adds new entries to the database. (Use an override on this setting to disable logging irrelevant runs.)");
+        $(`<button class="button">Download as JSON</button>`).on("click", e => {
+            PrestigeDBManager.uiDownloadAll();
+        }).appendTo(prestigeDBsection);
+        $(`<button class="button">Open Graphs</button>`).on("click", e => {
+            PrestigeDBManager.uiGraphs();
+        }).appendTo(prestigeDBsection);
 
         document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;
     }

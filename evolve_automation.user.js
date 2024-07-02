@@ -15527,13 +15527,7 @@ declare global {
         $('#script_settingsFile').on("click", function () {
             // This one is pretty printed since it's much easier to do when downloading
             let json = JSON.stringify(settingsRaw, undefined, 2);
-            let url = URL.createObjectURL(new Blob([json]));
-            let a = document.createElement('a');
-            a.download = settings.scriptSettingsExportFilename;
-            a.href = url;
-            a.click();
-            // Doesn't seem like there is any good way to do this, a minute should be fine.
-            setTimeout(() => {URL.revokeObjectURL(url);}, 60 * 1000);
+            triggerFileDownload(json, settings.scriptSettingsExportFilename);
         });
     }
 
@@ -20530,6 +20524,16 @@ declare global {
             }
         }
         return list;
+    }
+
+    function triggerFileDownload(contents, filename) {
+        let url = URL.createObjectURL(new Blob([contents]));
+        let a = document.createElement('a');
+        a.download = filename;
+        a.href = url;
+        a.click();
+        // Doesn't seem like there is any good way to do this, a minute should be fine.
+        setTimeout(() => { URL.revokeObjectURL(url); }, 60 * 1000);
     }
 
     // FAQ: "Why is this split key --- instead of something sane and obvious like a dot?"

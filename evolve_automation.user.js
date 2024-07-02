@@ -15790,6 +15790,8 @@ declare global {
 
     function resetTabHeight(tab) {
         let content = document.querySelector(`#script_${tab} .script-content`);
+        // May be possible if showScriptSettings is off.
+        if (!content) return;
         content.style.height = null;
         content.style.height = content.offsetHeight + "px";
     }

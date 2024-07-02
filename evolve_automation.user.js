@@ -6186,9 +6186,6 @@
 
         // Similar to fastEval, but the code runs in a different, snippet-specific environment.
         // We pass some arguments to the function to add extra callables.
-        // Extra functions:
-        // * code can call once() with a function. The function will run once, and then the results will be "cached".
-        //
         static #makeEval(snip) {
             const snippetKey = snip.id;
             if (this.#evalCache[snippetKey]) {
@@ -6917,7 +6914,10 @@ declare global {
                 let titleElem = $('<input type="text" style="width: 400px">').val(snip.title).appendTo(buttonBar);
                 let saveElem = $('<button>Save</button>').appendTo(buttonBar);
                 saveElem.on("click", () => {
-                    snip.title = titleElem.val();
+                    let val = titleElem.val();
+                    // Let's block some evil names that might break things if we use them as a key in an object
+                    if (["prototype", ...Object.getOwnPropertyNames(Object.prototype)].includes(val)) val = `Invalid name ${val}`;
+                    snip.title = val;
                     snip.code = this._currentlyEditingMonaco.getValue();
                     updateSettingsFromState();
                     SnippetManager.resetSnippet(snip);

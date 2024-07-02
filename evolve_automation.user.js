@@ -17516,6 +17516,7 @@ declare global {
 
                 TriggerManager.sortByPriority();
                 updateSettingsFromState();
+                updateTriggerSettingsContent();
             },
         });
 
@@ -17686,8 +17687,9 @@ declare global {
         let triggerElement = $('#script_trigger_' + trigger.seq).children().eq(6);
         triggerElement.empty().off("*");
 
-        let handler = getOverrideModalPathHandler(`priorityList---${trigger.seq}---enabled`, `priorityList---${trigger.seq}---enabledOverrides`, TriggerManager);
-        addTableToggle(triggerElement, `priorityList---${trigger.seq}---enabled`, handler);
+        // The priorityList is always sorted by .priority.
+        let handler = getOverrideModalPathHandler(`priorityList---${trigger.priority}---enabled`, `priorityList---${trigger.priority}---enabledOverrides`, TriggerManager);
+        addTableToggle(triggerElement, `priorityList---${trigger.priority}---enabled`, handler);
 
         triggerElement.find("label").css("margin-left", "0");
     }

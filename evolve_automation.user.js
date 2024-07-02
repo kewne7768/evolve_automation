@@ -7223,9 +7223,12 @@ declare global {
         }
 
         static async uiDownloadAll() {
-            let entries = await this.getPrestiges({});
-            let json = JSON.stringify({entries}, undefined, 2);
-            triggerFileDownload(json, "evolve-prestigedb.json");
+            return new Promise(async (resolve, reject) => {
+                let entries = await this.getPrestiges({});
+                let json = JSON.stringify({ entries }, undefined, 2);
+                triggerFileDownload(json, "evolve-prestigedb.json");
+                resolve("Done.");
+            });
         }
 
         static async uiGraphs() {
@@ -7296,6 +7299,29 @@ declare global {
 
             let chart = new Chart(canvas, config);
             this._chart = chart; // for debugging only really, leaks
+        }
+
+        static async importDatabase(json) {
+            // Expected to get a plain object with .entries as array.
+            // Milestones are not yet touched, but may be in the future.
+            return new Promise((resolve, reject) => {
+                let transaction = this._openDB.transaction(["resets"], "readwrite");
+                transaction.onerror = (e) => {
+                    reject(e);
+                };
+                let store = transaction.objectStore("resets");
+                let clearRequest = store.clear();
+                clearRequest.onsuccess = (e) => {
+                    // Now that we're here, a complete will mean we're done.
+                    transaction.oncomplete = (final) => {
+                        resolve("Done.");
+                    };
+                    // Now batch import all the provided entries.
+                    for (let entry of json.entries) {
+                        store.add(entry);
+                    }
+                };
+            });
         }
     }
 
@@ -19977,20 +20003,70 @@ declare global {
             if (settingsRaw.prestigeDBenabled) {
                 PrestigeDBManager.init();
             }
+            resetTabHeight("logging");
         };
         addSettingsHeader1(currentNode, "Prestige DB");
         let enabledNode = addSettingsToggle(currentNode, "prestigeDBenabled", "Enable prestige database", "Keeps track of your prestige times in a database. Activating this setting may pop up a dialog asking for data storage permissions. Do not add an override to this setting, add it to the log setting instead.", initPrestigeDB, initPrestigeDB);
         enabledNode.off("click"); // hack to prevent overrides, this is a technical setting only present because of the additional permissions required
 
         // TODO: Hide all of this if the database has never been enabled.
+        // TODO: Consider moving this to a different section. (I'm too lazy to set up scaffolding...)
         let prestigeDBsection = $("<div>");
         currentNode.append(prestigeDBsection);
         addSettingsToggle(prestigeDBsection, "prestigeDBlog", "Log entries", "Adds new entries to the database. (Use an override on this setting to disable logging irrelevant runs.)");
-        $(`<button class="button">Download as JSON</button>`).on("click", e => {
-            PrestigeDBManager.uiDownloadAll();
-        }).appendTo(prestigeDBsection);
-        $(`<button class="button">Open Graphs</button>`).on("click", e => {
+        $(`<button class="button" style="margin-left: 6px">Open Graphs</button>`).on("click", e => {
             PrestigeDBManager.uiGraphs();
+        }).appendTo(prestigeDBsection);
+
+        let progressP = $(`<p>Import/export status: <span>Not started</span></p>`).appendTo(prestigeDBsection);
+        let progressText = progressP.find("span");
+
+        $(`<button class="button">Export as JSON</button>`).on("click", async (e) => {
+            progressText.text("Running");
+            let result = await PrestigeDBManager.uiDownloadAll();
+            progressText.text(result);
+        }).appendTo(prestigeDBsection);
+
+        // This element is hidden but clicked by the button.
+        let fileInput = $(`<input type="file" id="script-prestigedb-import-file" accept=".json" style="display: none">`).on("change", async (e) => {
+            let fileElement = fileInput[0];
+            if (!fileElement.files.length) {
+                progressText.text("⚠️ Import failed: You must select a file first.");
+                return;
+            }
+
+            let file = fileElement.files[0];
+            let reader = new FileReader();
+            progressText.text("Loading file, please wait.");
+            reader.onloadend = async (pe) => {
+                progressText.text("Importing, please wait.");
+                let json;
+                try {
+                    json = JSON.parse(reader.result);
+                    if (!Array.isArray(json.entries)) {
+                        progressText.text(`⚠️ Invalid file: Invalid contents: .entries expected to be array`);
+                    }
+                }
+                catch (err) {
+                    progressText.text(`⚠️ Invalid file: JSON parsing failed: ${err}`);
+                    fileElement.value = null;
+                    return;
+                }
+
+                try {
+                    let result = await PrestigeDBManager.importDatabase(json);
+                    progressText.text(`✅ ${result}`);
+                }
+                catch (err) {
+                    progressText.text(`⚠️ ${err}`);
+                }
+
+                fileElement.value = null;
+            };
+            reader.readAsText(file);
+        }).appendTo(prestigeDBsection);
+        let importButton = $(`<button class="button">Import from JSON</button>`).on("click", async (e) => {
+            fileInput.click();
         }).appendTo(prestigeDBsection);
 
         document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;

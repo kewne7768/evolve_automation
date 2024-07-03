@@ -6180,7 +6180,6 @@
                 }
             }
 
-            resetTabHeight("snippetSettings");
             document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;
         }
 
@@ -15839,8 +15838,6 @@ declare global {
                 } else {
                     settingsRaw[collapsibles[i].id] = false;
                     content.style.display = "block";
-                    content.style.height = null;
-                    content.style.height = content.offsetHeight + "px";
                 }
 
                 updateSettingsFromState();
@@ -15848,14 +15845,6 @@ declare global {
         }
 
         document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;
-    }
-
-    function resetTabHeight(tab) {
-        let content = document.querySelector(`#script_${tab} .script-content`);
-        // May be possible if showScriptSettings is off.
-        if (!content) return;
-        content.style.height = null;
-        content.style.height = content.offsetHeight + "px";
     }
 
     function buildImportExport() {
@@ -17183,7 +17172,6 @@ declare global {
           .on('change', 'select', function() {
             state.evolutionTarget = null;
             updateRaceWarning();
-            resetTabHeight("evolutionSetting");
         });
 
         currentNode.append(`<div><span id="script_race_warning"></span></div>`);
@@ -17321,7 +17309,6 @@ declare global {
             settingsRaw.evolutionQueue.splice(id, 1);
             updateSettingsFromState();
             updateEvolutionSettingsContent();
-            resetTabHeight("evolutionSettings");
         });
 
 
@@ -17335,7 +17322,6 @@ declare global {
             } catch (error) {
                 queueNode.find('td:eq(0)').html(`<span class="has-text-danger">${error}</span>`);
             }
-            resetTabHeight("evolutionSettings");
         });
 
         return queueNode;
@@ -17359,8 +17345,6 @@ declare global {
 
         let tableBodyNode = $('#script_evolutionQueueTable');
         tableBodyNode.append(buildEvolutionQueueItem(queueLength-1));
-
-        resetTabHeight("evolutionSettings");
     }
 
     function buildPlanetSettings() {
@@ -17444,7 +17428,6 @@ declare global {
             resetTriggerSettings(true);
             updateSettingsFromState();
             updateTriggerSettingsContent();
-            resetTabHeight("triggerSettings");
 
             resetCheckbox("autoTrigger");
         };
@@ -17544,7 +17527,6 @@ declare global {
 
         buildTriggerToggleColumn(trigger);
         buildTriggerSettingsColumn(trigger);
-        resetTabHeight("triggerSettings");
     }
 
     function buildTriggerRequirementType(trigger) {
@@ -17704,7 +17686,6 @@ declare global {
             TriggerManager.RemoveTrigger(trigger.seq);
             updateSettingsFromState();
             updateTriggerSettingsContent();
-            resetTabHeight("triggerSettings");
         });
     }
 
@@ -18669,7 +18650,6 @@ declare global {
         addSettingsSelect(currentNode, "imitateRace", "Imitate race", "Imitate selected race, if available.", imitateOptions).on('change', 'select', function() {
             state.evolutionTarget = null;
             updateImitateWarning();
-            resetTabHeight("evolutionSettings");
         });
 
         currentNode.append(`<div><span id="script_imitate_warning"></span></div>`);
@@ -19640,7 +19620,6 @@ declare global {
                 }
             }
         }
-        resetTabHeight("buildingSettings");
     }
 
     function buildAllBuildingEnabledSettingsToggle() {
@@ -19838,7 +19817,6 @@ declare global {
             SnippetManager.softResetAllSnippets();
             updateSnippetSettingsContent();
             updateSettingsFromState();
-            resetTabHeight("snippetSettings");
         };
 
         let currentNode = $('#script_snippetContent');
@@ -20041,7 +20019,6 @@ declare global {
             if (settingsRaw.prestigeDBenabled) {
                 PrestigeDBManager.init();
             }
-            resetTabHeight("logging");
         };
         addSettingsHeader1(currentNode, "Prestige DB");
         let enabledNode = addSettingsToggle(currentNode, "prestigeDBenabled", "Enable prestige database", "Keeps track of your prestige times in a database. Activating this setting may pop up a dialog asking for data storage permissions. Do not add an override to this setting, add it to the log setting instead.", initPrestigeDB, initPrestigeDB);

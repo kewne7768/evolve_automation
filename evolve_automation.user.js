@@ -17530,7 +17530,7 @@ declare global {
         let tableBodyNode = $('#script_triggerTableBody');
         let newTableBodyText = "";
 
-        newTableBodyText += `<tr id="script_trigger_${trigger.seq}" value="${trigger.seq}" class="script-draggable"><td style="width:16%"></td><td style="width:18%"></td><td style="width:11%"></td><td style="width:16%"></td><td style="width:18%"></td><td style="width:11%"></td><td style="width:5%"></td><td style="width:5%"><span class="script-lastcolumn"></span></td></tr>`;
+        newTableBodyText += `<tr id="script_trigger_${trigger.seq}" value="${trigger.seq}" class="script-draggable"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td><span class="script-lastcolumn"></span></td></tr>`;
 
         tableBodyNode.append($(newTableBodyText));
 

@@ -7223,6 +7223,7 @@ declare global {
 
         static async uiDownloadAll() {
             return new Promise(async (resolve, reject) => {
+                if (!this.isAvailable()) { reject("Prestige DB is not enabled or the database is closed."); return; }
                 let entries = await this.getPrestiges({});
                 let json = JSON.stringify({ entries }, undefined, 2);
                 triggerFileDownload(json, "evolve-prestigedb.json");
@@ -7357,6 +7358,10 @@ declare global {
                     }
                 };
             });
+        }
+
+        static isAvailable() {
+            return !!this._openDB;
         }
     }
 
@@ -20012,15 +20017,32 @@ declare global {
             updateSettingsFromState();
         });
 
-        // These buttons will misbehave entirely if the DB feature is disabled, as the indexedDB won't be open.
+        // These buttons will misbehave entirely if the DB feature is disabled, as the indexedDB won't be open/shouldn't be open
+        // without the user having confirmed they persisted it.
         // And that requires permissions to persist properly, and we don't want to bother users that don't want it.
         // Easy fix: Only render them if the feature is enabled.
         const initPrestigeDB = () => {
             if (settingsRaw.prestigeDBenabled) {
                 PrestigeDBManager.init();
+                updateWarningText();
+                navigator.storage.persist().then(updateWarningText);
             }
         };
+
         addSettingsHeader1(currentNode, "Prestige DB");
+
+        const updateWarningText = () => {
+            navigator.storage.persisted().then((p) => {
+                if (p) {
+                    warning.text(`Persistent storage rights granted. Your browser should not randomly wipe the database. It's still recommended to use the export button on a regular basis, though.`);
+                }
+                else {
+                    warning.text(`Persistent storage rights denied. Warning: your browser may clear the history at any moment, such as if it runs out of cache space.`);
+                }
+            });
+        }
+        let warning = $("<p>").text(`If you choose to enable the optional prestige database feature, persistent storage rights will be requested in your browser. Those rights are also technically optional, but if you don't grant these rights, your browser is likely to delete the log to free up disk space when needed. Regular exports using the export to JSON button are strongly suggested either way.`).appendTo(currentNode);
+
         let enabledNode = addSettingsToggle(currentNode, "prestigeDBenabled", "Enable prestige database", "Keeps track of your prestige times in a database. Activating this setting may pop up a dialog asking for data storage permissions. Do not add an override to this setting, add it to the log setting instead.", initPrestigeDB, initPrestigeDB);
         enabledNode.off("click"); // hack to prevent overrides, this is a technical setting only present because of the additional permissions required
 
@@ -20038,7 +20060,13 @@ declare global {
 
         $(`<button class="button">Export as JSON</button>`).on("click", async (e) => {
             progressText.text("Running");
-            let result = await PrestigeDBManager.uiDownloadAll();
+            let result;
+            try {
+                result = await PrestigeDBManager.uiDownloadAll();
+            }
+            catch(e) {
+                result = e;
+            }
             progressText.text(result);
         }).appendTo(prestigeDBsection);
 
@@ -20081,6 +20109,8 @@ declare global {
             reader.readAsText(file);
         }).appendTo(prestigeDBsection);
         let importButton = $(`<button class="button">Import from JSON</button>`).on("click", async (e) => {
+            // Need to make sure the DB is open, otherwise we'll fail anyway.
+            if (!PrestigeDBManager.isAvailable()) { progressText.text(`⚠️ Database unavailable.`); return; }
             fileInput.click();
         }).appendTo(prestigeDBsection);
 

@@ -7089,9 +7089,12 @@ declare global {
             this._openDBRequest = null;
         }
 
-        static wipeEverything() {
-            if (this._openDB) this._openDB.close();
-            win.indexedDB.deleteDatabase("Evolve_UserScript_PrestigeDB");
+        static wipeEverything(forReal) {
+            // It's a little easy to run this from the browser devtools by accident...
+            if (forReal === "For real.") {
+                if (this._openDB) this._openDB.close();
+                win.indexedDB.deleteDatabase("Evolve_UserScript_PrestigeDB");
+            }
         }
 
         static _tryCommitLog() {

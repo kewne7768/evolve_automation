@@ -6250,6 +6250,19 @@
                     return fn(triggerable);
                 }
             };
+            // trigger() but only supports custom lists.
+            // Returns a boolean true if all costs in the list are currently satisfied.
+            fn.custom = (triggerable, allowedActions) => {
+                // Custom resource list
+                SnippetManager.customResourceDemands.push({
+                    name: snip.title,
+                    cause: "Snippet",
+                    cost: triggerable,
+                    allowedConflicts: allowedActions,
+                });
+
+                return !(Object.keys(triggerable).some((rn) => resources[rn].currentQuantity < triggerable[rn]));
+            }
             return fn;
         }
 
@@ -6510,24 +6523,14 @@ declare global {
          * Triggers an Action on your snippet's behalf.
          * It will keep running until you stop making the trigger() call.
          *
-         * Custom resource lists can be passed too.
-         * Custom resource lists can optionally include a list of permissible buildings that are allowed to spend those resources as second parameter.
-         * (Currently not possible on Actions.)
-         *
          * @example Example: After Stargate built, build 50 attractors
          * \`\`\`
          * if (buildings.BlackholeStargateComplete.count && buildings.BadlandsAttractor.count < 50) {
          * trigger(buildings.BadlandsAttractor);
          * }
          * \`\`\`
-         *
-         * @example Custom resource list
-         * \`\`\`
-         * trigger({ Mythril: 1000000 }, [buildings.RedZiggurat, buildings.RuinsArchaeology]);
-         * \`\`\`
          */
-        <T extends Action | Technology | ResourceList>(action: T): void;
-        <T extends ResourceList>(action: T, allowedActions?: (Action | Technology)[] | undefined): void;
+        <T extends Action | Technology>(action: T): void;
 
         /**
          * Triggers an Action up to a given total building number count, inclusive.
@@ -6538,6 +6541,20 @@ declare global {
          * \`\`\`
          */
         amount<T extends Action>(action: T, count: number): void;
+
+        /**
+         * Triggers a custom resource list.
+         * This list is an object of resource keys to amounts obtained via resourceList (technically not necessary, it's OK to pass one directly too if you're careful).
+         * The script will work towards obtaining and stockpiling these resources.
+         * Custom resource lists can optionally include a list of permissible buildings that are allowed to spend those resources as second parameter,
+         * which can help if you know some buildings are still worth building despite the stockpiling.
+         * That is also helpful if you already know what you're going to spend it on and are dynamically calculating the required quantities.
+         * @example Save up Mythril, but Zigs and Archaeology Digs can spend them
+         * \`\`\`
+         * trigger.custom(resourceList({ Mythril: 1000000 }), [buildings.RedZiggurat, buildings.RuinsArchaeology]);
+         * \`\`\`
+         */
+        custom<T extends ResourceList>(action: T, allowedActions?: (Action | Technology)[] | undefined): boolean;
     };
 
     /**

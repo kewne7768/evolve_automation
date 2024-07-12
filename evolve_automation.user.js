@@ -7040,7 +7040,7 @@ declare global {
         static _using = false;
         static _openDB = null;
         static _openDBRequest = null;
-        static _propertyHooks = {};
+        static _entryHooks = {};
 
         static _handleError(e) {
             console.error("PrestigeDB: %o", e);
@@ -7175,9 +7175,10 @@ declare global {
                 extra: {}, // place to store whatever your heart desires
             };
 
-            // Let snippets do things (via evil hacks, but OK... maybe a proper handler system can come later)
-            let hookResults = Object.fromEntries(Object.entries(this._propertyHooks).map(([prop, fn]) => { return [prop, fn(resetEntry)]; }));
-            Object.assign(resetEntry, hookResults);
+            // Let snippets hook into the entry
+            let hookResults = Object.values(this._entryHooks).map(fn => fn(resetEntry)).filter(v => typeof v === "object" && v !== null);
+            // Need to deep copy, luckily jQuery got us covered!
+            $.extend(true, resetEntry, ...hookResults);
 
             // In case we don't make it in time or the DB is closed for some reason, set it in localStorage (this is synchronous).
             localStorage.setItem("Evolve_UserScript_PrestigeDBNext", JSON.stringify(resetEntry));
@@ -7185,12 +7186,13 @@ declare global {
             this._tryCommitLog();
         }
 
-        static registerHook(targetProperty, fn) {
+        // Entry hooks can return an object to extend the entry. They'll be called with the base entry as their first parameter.
+        static registerEntryHook(name, fn) {
             if (typeof fn !== "function") throw `${fn} must be a function`;
-            this._propertyHooks[targetProperty] = fn;
+            this._entryHooks[name] = fn;
         }
-        static unregisterHook(targetProperty) {
-            delete this._propertyHooks[targetProperty];
+        static unregisterEntryHook(name) {
+            delete this._entryHooks[name];
         }
 
         static _getCurrentStars() {

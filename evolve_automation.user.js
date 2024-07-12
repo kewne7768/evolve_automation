@@ -6569,9 +6569,9 @@ declare global {
      * Technically optional.
      * 
      * @example Example
-     * \`\`\
+     * \`\`\`
      * trigger(resourceList({Mythril: 100000, Bolognium: 1234567}));
-     * \`\`\
+     * \`\`\`
      */
     function resourceList<IncludedResources extends ResourceList>(list: IncludedResources): ResourceList&IncludedResources;
     /**

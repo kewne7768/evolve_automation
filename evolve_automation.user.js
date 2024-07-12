@@ -20076,24 +20076,15 @@ declare global {
         let prestigeDBsection = $("<div>");
         currentNode.append(prestigeDBsection);
         addSettingsToggle(prestigeDBsection, "prestigeDBlog", "Log entries", "Adds new entries to the database. (Use an override on this setting to disable logging irrelevant runs.)");
-        $(`<button class="button" style="margin-left: 6px">Open Graphs</button>`).on("click", e => {
+
+        $(`<button class="button" style="margin: 6px 6px 6px 0">Open Graphs</button>`).on("click", e => {
             PrestigeDBManager.uiGraphs();
         }).appendTo(prestigeDBsection);
 
-        let progressP = $(`<p>Import/export status: <span>Not started</span></p>`).appendTo(prestigeDBsection);
-        let progressText = progressP.find("span");
+        addSettingsHeader2(prestigeDBsection, "Prestige DB: Import/export");
 
-        $(`<button class="button">Export as JSON</button>`).on("click", async (e) => {
-            progressText.text("Running");
-            let result;
-            try {
-                result = await PrestigeDBManager.uiDownloadAll();
-            }
-            catch(e) {
-                result = e;
-            }
-            progressText.text(result);
-        }).appendTo(prestigeDBsection);
+        let progressP = $(`<p style="margin-bottom: 0">Import/export status: <span>Not started</span></p>`).appendTo(prestigeDBsection);
+        let progressText = progressP.find("span");
 
         // This element is hidden but clicked by the button.
         let fileInput = $(`<input type="file" id="script-prestigedb-import-file" accept=".json" style="display: none">`).on("change", async (e) => {
@@ -20133,10 +20124,22 @@ declare global {
             };
             reader.readAsText(file);
         }).appendTo(prestigeDBsection);
-        let importButton = $(`<button class="button">Import from JSON</button>`).on("click", async (e) => {
+        let importButton = $(`<button class="button" style="margin: 6px 6px 6px 0">Import PrestigeDB from JSON</button>`).on("click", async (e) => {
             // Need to make sure the DB is open, otherwise we'll fail anyway.
             if (!PrestigeDBManager.isAvailable()) { progressText.text(`⚠️ Database unavailable.`); return; }
             fileInput.click();
+        }).appendTo(prestigeDBsection);
+
+        let exportButton = $(`<button class="button" style="margin: 6px 6px 6px 0">Export PrestigeDB as JSON</button>`).on("click", async (e) => {
+            progressText.text("Running");
+            let result;
+            try {
+                result = await PrestigeDBManager.uiDownloadAll();
+            }
+            catch (e) {
+                result = `⚠️ ${e}`;
+            }
+            progressText.text(result);
         }).appendTo(prestigeDBsection);
 
         document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;

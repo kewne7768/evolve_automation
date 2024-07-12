@@ -6688,6 +6688,14 @@ declare global {
         requestedQuantity: number;
         /** Some kind of change to production or consumption of this resource was made this tick (informs the script that it should be careful making more changes). */
         incomeAdusted: boolean;
+        /** Range of how much of this resource we have compared to the most expensive autoBuild target. 2.0 means we have 2x the amount of that. */
+        usefulRatio: number;
+        /** Range of how much the storage is filled. 0.6 is 60% full. */
+        storageRatio: number;
+        /** Time in seconds until full */
+        timeToFull: number;
+        /** Time in seconds until we've reached storageRequired */
+        timeToRequired: number;
 
         /** Displayed resource name */
         title: string;

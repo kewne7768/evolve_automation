@@ -15811,6 +15811,14 @@ declare global {
             #script-monaco-modal-editor .monaco-editor .main {
                 margin: 0 !important;
             }
+            /* Monaco: Quick Fix popup, conflicts with buefy .title, should be from Monaco .action-widget */
+            #script-monaco-modal-editor .monaco-editor .title {
+                font-size: inherit !important; /* 13px */
+                color: var(--vscode-quickInputList-focusForeground) !important;
+                line-height: 24px !important;
+                font-weight: initial !important;
+                margin-bottom: 0 !important;
+            }
         `;
 
         // Create style document

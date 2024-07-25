@@ -8966,6 +8966,7 @@ declare global {
             productionFoundryWeighting: "demanded",
             productionCraftsmen: "nocraft",
             productionSmelting: "required",
+            productionSmeltingMaxIronRatio: 0.2,
             productionSmeltingIridium: 0.5,
             productionFactoryMinIngredients: 0.01,
             replicatorResource: 'Stone',
@@ -11113,8 +11114,13 @@ declare global {
             }
         }
 
+        // Users might make weird calculations in overrides, so be sure to clamp to 0-1 range
+        let maxIronRatio = Math.min(1, Math.max(settings.productionSmeltingMaxIronRatio, 0));
+
+        // Set initially wanted ratio
         let ironWeighting = 0;
         let steelWeighting = 0;
+        let allowDemand = true;
         switch (settings.productionSmelting){
             case "iron":
                 ironWeighting = resources.Iron.timeToFull;
@@ -11128,6 +11134,17 @@ declare global {
                     ironWeighting = resources.Iron.timeToFull;
                 }
                 break;
+            case "configuredRatio":
+                allowDemand = false;
+                steelWeighting = resources.Steel.timeToFull;
+                if (!steelWeighting) {
+                    ironWeighting = resources.Iron.timeToFull;
+                }
+                else {
+                    ironWeighting = steelWeighting * maxIronRatio;
+                    steelWeighting *= 1 - maxIronRatio;
+                }
+                break;
             case "storage":
                 ironWeighting = resources.Iron.timeToFull;
                 steelWeighting = resources.Steel.timeToFull;
@@ -11138,75 +11155,63 @@ declare global {
                 break;
         }
 
-        if (resources.Iron.isDemanded()) {
-            ironWeighting = Number.MAX_SAFE_INTEGER;
+        // If user isn't configuring ratio manually, make demanded override ratios.
+        if (allowDemand) {
+            if (resources.Steel.isDemanded()) {
+                steelWeighting = Number.MAX_SAFE_INTEGER;
+            }
+            else if (resources.Iron.isDemanded()) {
+                ironWeighting = steelWeighting < 1 ? Number.MAX_SAFE_INTEGER : (steelWeighting * maxIronRatio);
+                steelWeighting *= 1 - maxIronRatio;
+            }
         }
-        if (resources.Steel.isDemanded()) {
-            steelWeighting = Number.MAX_SAFE_INTEGER;
-        }
+
+        // If no Iron sources, Iron smelters do nothing, turn them off.
         if (jobs.Miner.count === 0 && buildings.BeltIronShip.stateOnCount === 0) {
             ironWeighting = 0;
             steelWeighting = 1;
             maxAllowedSteel = totalSmelters - smelterIridiumCount;
         }
 
-        // Steel and Iridium share a part of maxAllowedSteel.
-        let smeltersToSplit = totalSmelters - smelterIridiumCount;
-        let baseSteelRatio = ironWeighting > 0 ? steelWeighting / ironWeighting : 1;
-
+        // If Iron or Steel (including Titanium if produced as byproduct) are full, turn them off.
         let allowIronSmelting = resources.Iron.storageRatio < 0.99;
         let allowSteelSmelting = (resources.Steel.storageRatio < 0.99) || (resources.Titanium.storageRatio < 0.99 && haveTech("titanium"));
+        if (!allowIronSmelting) {
+            ironWeighting = 0;
+        }
+        if (!allowSteelSmelting) {
+            steelWeighting = 0;
+        }
 
-        let newWantedIronCount = 0;
+        // Steel and Iridium share a part of maxAllowedSteel.
+        let totalWeighting = ironWeighting + steelWeighting;
+        let smeltersToSplit = totalSmelters - smelterIridiumCount;
+        let realSteelRatio = totalWeighting > 0 ? (steelWeighting / totalWeighting) : 1;
+
         let newWantedSteelCount = 0;
 
-        // CONFIGURABLES
-        let maxSteelRatio = totalSmelters < 10 ? 1.0 : 0.9; // At 0.9, max 90% of non-Iridium smelters can be Steel (10% Iron rounded up)
-        let minIron = Math.min(2, Math.floor(totalSmelters / 10));
-        let maxIron = Math.max(10, ironWeighting > steelWeighting ? Math.floor(totalSmelters / 3) : 0);
-
         if (allowIronSmelting && allowSteelSmelting) {
-            // Split to ratio...
-            let usedSteelRatio = baseSteelRatio < maxSteelRatio ? baseSteelRatio : maxSteelRatio;
-            newWantedIronCount = Math.ceil((1-usedSteelRatio) * smeltersToSplit);
-            newWantedSteelCount = Math.floor(usedSteelRatio * smeltersToSplit);
-
-            // ...now apply min/max iron caps
-            if (minIron >= 0 && newWantedIronCount < minIron) {
-                // Take from steel
-                newWantedSteelCount -= (minIron - newWantedIronCount);
-                newWantedIronCount = minIron;
-            }
-            else if (maxIron >= 0 && newWantedIronCount > maxIron) {
-                // Add to steel
-                newWantedSteelCount += (newWantedIronCount - maxIron);
-                newWantedIronCount = maxIron;
-            }
-        }
-        else if (allowIronSmelting) {
-            // All iron
-            maxSteelRatio = 0;
-            newWantedIronCount = smeltersToSplit;
+            // Split using calculated ratio
+            newWantedSteelCount = Math.ceil(realSteelRatio * smeltersToSplit);
         }
         else if (allowSteelSmelting) {
             // All steel
-            maxSteelRatio = 1;
             newWantedSteelCount = smeltersToSplit;
         }
-        else {
-            // Leave at 0/0 if nothing allowed
-        }
 
+        // But what if we can't produce this much Steel? Then cap
         if (newWantedSteelCount > maxAllowedSteel) {
-            newWantedIronCount += newWantedSteelCount - maxAllowedSteel;
             newWantedSteelCount = maxAllowedSteel;
         }
+
+        // Compute iron smelters as rest of remaining share
+        let newWantedIronCount = allowIronSmelting ? Math.max(0, smeltersToSplit - newWantedSteelCount) : 0;
 
         // Compare to actual smelters.
         smeltAdjust.Iron = newWantedIronCount - smelterIronCount;
         smeltAdjust.Steel = newWantedSteelCount - smelterSteelCount;
 
-        //console.debug("smeltAdjust: %o / baseSteelRatio: %f", smeltAdjust, baseSteelRatio);
+        //console.debug("smeltAdjust: %o / realSteelRatio: %f", smeltAdjust, realSteelRatio);
 
         Object.entries(smeltAdjust).forEach(([id, delta]) => delta < 0 && m.decreaseSmelting(id, delta * -1));
         Object.entries(smeltAdjust).forEach(([id, delta]) => delta > 0 && m.increaseSmelting(id, delta));
@@ -19049,10 +19054,12 @@ declare global {
         addStandardHeading(currentNode, "Smelter");
 
         let smelterOptions = [{val: "iron", label: "Prioritize Iron", hint: "Produce only Iron, untill storage capped, and switch to Steel after that"},
-                              {val: "steel", label: "Prioritize Steel", hint: "Produce as much Steel as possible, untill storage capped, and switch to Iron after that"},
+                              {val: "steel", label: "Prioritize Steel", hint: "Produce as much Steel as possible, unless Iron is demanded but Steel is not, in which case up to 'Maximum Iron ratio' is dedicated to Iron"},
+                              {val: "configuredRatio", label: "Configured Iron Ratio", hint: "Manage Steel / Iron ratio manually using 'Maximum Iron ratio'"},
                               {val: "storage", label: "Up to full storages", hint: "Produce both Iron and Steel at ratio which will fill both storages at same time for both"},
                               {val: "required", label: "Up to required amounts", hint: "Produce both Iron and Steel at ratio which will produce maximum amount of resources required for buildings at same time for both"}];
         addSettingsSelect(currentNode, "productionSmelting", "Smelters production", "Distribution of smelters between iron and steel", smelterOptions);
+        addSettingsNumber(currentNode, "productionSmeltingMaxIronRatio", "Maximum Iron ratio", "When using 'Configured Iron Ratio' mode: Share of smelters dedicated to Iron regardless of settings or demand, unless resource full. When using other mode: Maximum allowed share while Iron is demanded.");
         addSettingsNumber(currentNode, "productionSmeltingIridium", "Iridium ratio", "Share of smelters dedicated to Iridium");
 
         currentNode.append(`

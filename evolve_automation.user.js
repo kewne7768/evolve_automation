@@ -585,6 +585,12 @@
             KeyManager.set(false, false, false);
             vue.craft(this.id, count);
         }
+
+        requestQuantity(req) {
+            if (this.currentQuantity < req && this.requestedQuantity < req) {
+                this.requestedQuantity = req;
+            }
+        }
     }
 
     class SoulGem extends Resource {
@@ -6755,6 +6761,9 @@ declare global {
         /** Is visible. */
         isUnlocked(): boolean;
 
+        /** Demand X of this resource to be made. */
+        requestQuantity(req: number): void;
+
         /** Many more properties and methods exist and aren't yet documented. */
         [key: string]: any;
     }
@@ -11114,11 +11123,10 @@ declare global {
                 }
             }
 
-            // Set 120s of consumption as demanded
+            // Set 120s of potential max consumption as demanded. Doing this in an auto function is not always safe due to order of operations,
+            // but it works out here.
             let req = ((smelterSteelCount * productionCost.quantity) * CONSUMPTION_BALANCE_TARGET + productionCost.minRateOfChange);
-            if (resource.currentQuantity < req && resource.requestedQuantity < req) {
-                resource.requestedQuantity = req;
-            }
+            resource.requestQuantity(req);
         }
 
         // Users might make weird calculations in overrides, so be sure to clamp to 0-1 range
@@ -14223,20 +14231,20 @@ declare global {
                 for (let res in demandCost) {
                     let resource = resources[res];
                     let quantity = demandCost[res];
-                    resource.requestedQuantity = Math.max(resource.requestedQuantity, quantity);
+                    resource.requestQuantity(quantity);
                 }
             }
         }
 
         // Request money for unification
         if (SpyManager.purchaseMoney && settings.prioritizeUnify.includes("req")) {
-            resources.Money.requestedQuantity = Math.max(resources.Money.requestedQuantity, SpyManager.purchaseMoney);
+            resources.Money.requestQuantity(SpyManager.purchaseMoney);
         }
 
         if (settings.autoFleet && FleetManagerOuter.nextShipAffordable && settings.prioritizeOuterFleet.includes("req")) {
             for (let res in FleetManagerOuter.nextShipCost) {
                 let resource = resources[res];
-                resource.requestedQuantity = Math.max(resource.requestedQuantity, FleetManagerOuter.nextShipCost[res]);
+                resource.requestQuantity(FleetManagerOuter.nextShipCost[res]);
             }
         }
 
@@ -14252,7 +14260,7 @@ declare global {
                     // Craftsmen use 1/140 of game's given cost base per tick, before Crafty
                     // Demand 120s worth of production if we were to put all crafters on this resource (effectively 60s with Crafty)
                     let minExpected = (material.maxQuantity * resource.craftPreserve) + (availableCrafters * (1/140) * CONSUMPTION_BALANCE_TARGET * resource.cost[res]);
-                    material.requestedQuantity = Math.max(material.requestedQuantity, minExpected);
+                    material.requestQuantity(minExpected);
                 }
             }
         }
@@ -14265,29 +14273,23 @@ declare global {
         if (resources.Stanene.isDemanded()) {
             // 0.02 Nano Tubes/s/slot
             const minNanoTube = factoryMin(resources.Nano_Tube, 0.02);
-            if (resources.Nano_Tube.currentQuantity < minNanoTube) {
-                resources.Nano_Tube.requestedQuantity = Math.max(resources.Nano_Tube.requestedQuantity, minNanoTube);
-            }
+            resources.Nano_Tube.requestQuantity(minNanoTube);
         }
         if (resources.Nano_Tube.isDemanded()) {
             // 8 Coal/s/slot
             const minCoal = factoryMin(resources.Coal, 8);
-            if (resources.Coal.currentQuantity < minCoal) {
-                resources.Coal.requestedQuantity = Math.max(resources.Coal.requestedQuantity, minCoal);
-            }
+            resources.Coal.requestQuantity(minCoal);
         }
         if (resources.Furs.isDemanded()) {
             // 1.5 Polymer/s/slot
             const minPolymer = factoryMin(resources.Polymer, 1.5);
-            if (resources.Polymer.currentQuantity < minPolymer) {
-                resources.Polymer.requestedQuantity = Math.max(resources.Polymer.requestedQuantity, minPolymer);
-            }
+            resources.Polymer.requestQuantity(minPolymer);
         }
         // TODO: Prioritize missing consumptions of buildings
         // Force crafting Stanene when there's less than 120s worths of consumption (100/s each)
         // This synergizes with the resource check which requires at least 60s
         if (buildings.Alien1VitreloyPlant.count > 0 && resources.Stanene.currentQuantity < (buildings.Alien1VitreloyPlant.count * CONSUMPTION_BALANCE_TARGET * 100)) {
-            resources.Stanene.requestedQuantity = (buildings.Alien1VitreloyPlant.count * CONSUMPTION_BALANCE_TARGET * 100);
+            resources.Stanene.requestQuantity(buildings.Alien1VitreloyPlant.count * CONSUMPTION_BALANCE_TARGET * 100);
         }
     }
 

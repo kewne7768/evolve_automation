@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.122.1
+// @version      3.3.1.123
 // @description  try to take over the world!
 // @downloadURL  https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.user.js
 // @updateURL    https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.meta.js
@@ -3196,8 +3196,8 @@
           () => "Not enough energy",
           () => settings.buildingWeightingUnderpowered
       ],[
-          () => state.knowledgeRequiredByTechs < resources.Knowledge.maxQuantity,
-          (building) => building.is.knowledge && building !== buildings.Wardenclyffe, // We want Wardenclyffe for morale
+          () => state.knowledgeRequiredByTechs <= resources.Knowledge.maxQuantity,
+          (building) => building.is.knowledge && building !== buildings.Wardenclyffe && (building !== buildings.StargateTelemetryBeacon || building.count > 0), // We want Wardenclyffe for morale; first beacon required for progress
           () => "No need for more knowledge",
           () => settings.buildingWeightingUselessKnowledge
       ],[
@@ -3228,7 +3228,7 @@
       ],[
           () => game.global.race.hooved && resources.Horseshoe.spareQuantity >= resources.Horseshoe.storageRequired,
           (building) => building instanceof ResourceAction && building.resource === resources.Horseshoe,
-          () => "No more Horseshoes needed",
+          () => `No more ${resources.Horseshoe.title} needed`,
           () => settings.buildingWeightingHorseshoeUseless
       ],[
           () => game.global.race.calm && resources.Zen.currentQuantity < resources.Zen.maxQuantity,
@@ -3256,7 +3256,7 @@
           () => "Will be destroyed after impact",
           () => settings.buildingWeightingTemporal
       ],[
-          () => true,
+          () => true, // TODO: Only used for name contest, no need to check at other game stages
           (building) => building.is.random,
           () => "Randomized weighting",
           () => 1 + Math.random() // Fluctuate weight to pick random item
@@ -8969,7 +8969,6 @@ declare global {
             productionSmeltingMaxIronRatio: 0.2,
             productionSmeltingIridium: 0.5,
             productionFactoryMinIngredients: 0.01,
-            replicatorResource: 'Stone',
             replicatorAssignGovernorTask: true
         }
 
@@ -9386,7 +9385,7 @@ declare global {
         // Remove deprecated post-overrides settings
         ["res_containers_m_", "res_crates_m_"].forEach(id => Object.values(resources)
           .forEach(res => { delete settingsRaw[id + res.id], delete settingsRaw.overrides[id + res.id] }));
-        ["prestigeWhiteholeEjectAllCount", "prestigeWhiteholeDecayRate", "genesAssembleGeneAlways", "buildingsConflictQueue", "buildingsConflictRQueue", "buildingsConflictPQueue", "fleet_outer_pr_spc_hell", "fleet_outer_pr_spc_dwarf", "prestigeEnabledBarracks", "bld_s2_city-garrison", "prestigeAscensionSkipCustom", "prestigeBioseedGECK", "tickTimeout", "minorTraitSettingsCollapsed", "fleetOuterMinSyndicate", "smelter_fuel_p_Star"]
+        ["prestigeWhiteholeEjectAllCount", "prestigeWhiteholeDecayRate", "genesAssembleGeneAlways", "buildingsConflictQueue", "buildingsConflictRQueue", "buildingsConflictPQueue", "fleet_outer_pr_spc_hell", "fleet_outer_pr_spc_dwarf", "prestigeEnabledBarracks", "bld_s2_city-garrison", "prestigeAscensionSkipCustom", "prestigeBioseedGECK", "tickTimeout", "minorTraitSettingsCollapsed", "fleetOuterMinSyndicate", "smelter_fuel_p_Star", "replicatorResource"]
           .forEach(id => { delete settingsRaw[id], delete settingsRaw.overrides[id] });
     }
 
@@ -12391,17 +12390,17 @@ declare global {
             return "Ignored research";
         }
 
-        // Save soul gems for reset
-        if (settings.prestigeType === "whitehole" && settings.prestigeWhiteholeSaveGems && itemId !== "tech-virtual_reality" &&
-            tech.cost["Soul_Gem"] > resources.Soul_Gem.currentQuantity - 10) {
-            return "Saving up Soul Gems for prestige";
-        }
-
         // Don't click any reset options without user consent... that would be a dick move, man.
         if (itemId === "tech-exotic_infusion" || itemId === "tech-infusion_check" || itemId === "tech-infusion_confirm" ||
             itemId === "tech-dial_it_to_11" || itemId === "tech-limit_collider" || itemId === "tech-demonic_infusion" ||
             itemId === "tech-protocol66" || itemId === "tech-protocol66a") {
             return "Reset research";
+        }
+
+        // Save soul gems for reset
+        if (settings.prestigeType === "whitehole" && settings.prestigeWhiteholeSaveGems && itemId !== "tech-virtual_reality" &&
+            tech.cost["Soul_Gem"] > resources.Soul_Gem.currentQuantity - 10) {
+            return "Saving up Soul Gems for prestige";
         }
 
         if (itemId === "tech-isolation_protocol" && settings.prestigeType !== "retire") {
@@ -12591,9 +12590,9 @@ declare global {
             if (building.is.smart && building.autoStateSmart) {
                 if (resources.Power.currentQuantity <= resources.Power.maxQuantity || haveTech('replicator')) { // Saving power, unless we can afford everything
                     // Disable Belt Space Stations with no workers
-                    if (building === buildings.BeltSpaceStation && game.breakdown.c.Elerium) {
-                        let stationStorage = parseFloat(game.breakdown.c.Elerium[game.loc("space_belt_station_title")] ?? 0);
-                        let extraStations = Math.floor((resources.Elerium.maxQuantity - resources.Elerium.maxCost) / stationStorage);
+                    if (building === buildings.BeltSpaceStation) {
+                        let stationStorage = parseFloat(game.breakdown.c.Elerium?.[game.loc("space_belt_station_title")] ?? 0);
+                        let extraStations = stationStorage > 0 ? Math.floor((resources.Elerium.maxQuantity - resources.Elerium.maxCost) / stationStorage) : 0;
                         let minersNeeded = buildings.BeltEleriumShip.stateOnCount * 2 + buildings.BeltIridiumShip.stateOnCount + buildings.BeltIronShip.stateOnCount;
                         maxStateOn = Math.min(maxStateOn, Math.max(currentStateOn - extraStations, Math.ceil(minersNeeded / 3)));
                     }
@@ -19034,7 +19033,7 @@ declare global {
             updateSettingsFromState();
             updateProductionSettingsContent();
 
-            resetCheckbox("autoQuarry", "autoMine", "autoExtractor", "autoGraphenePlant", "autoSmelter", "autoCraft", "autoFactory", "autoMiningDroid");
+            resetCheckbox("autoQuarry", "autoMine", "autoExtractor", "autoGraphenePlant", "autoSmelter", "autoCraft", "autoFactory", "autoMiningDroid", "autoReplicator");
             removeCraftToggles();
         };
 

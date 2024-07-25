@@ -11100,6 +11100,7 @@ declare global {
         // Just assume that smelters will always be fueled so Iron smelting is unlimited
         // We want to work out the maximum steel smelters that we can have based on our resource consumption
         let steelSmeltingConsumption = m.Productions.Steel.cost;
+        let steelConsumptionMissing = false;
         for (let productionCost of steelSmeltingConsumption) {
             let resource = productionCost.resource;
             // Allow using all resources for Steel until 60s of consumption left, unless demanded.
@@ -11109,8 +11110,15 @@ declare global {
                 let affordableAmount = Math.max(0, Math.floor(remainingRateOfChange / productionCost.quantity));
                 if (affordableAmount < maxAllowedSteel) {
                     state.tooltips["smelterMatssteel"] = `Too low ${resource.name} income<br>`;
+                    steelConsumptionMissing = true;
+                    maxAllowedSteel = Math.min(maxAllowedSteel, affordableAmount);
                 }
-                maxAllowedSteel = Math.min(maxAllowedSteel, affordableAmount);
+            }
+
+            // Set 120s of consumption as demanded
+            let req = ((smelterSteelCount * productionCost.quantity) * CONSUMPTION_BALANCE_TARGET + productionCost.minRateOfChange);
+            if (resource.currentQuantity < req && resource.requestedQuantity < req) {
+                resource.requestedQuantity = req;
             }
         }
 
@@ -11155,9 +11163,9 @@ declare global {
                 break;
         }
 
-        // If user isn't configuring ratio manually, make demanded override ratios.
+        // If user isn't configuring ratio manually, make demanded override ratios, but Iron demand only goes to a certain %.
         if (allowDemand) {
-            if (resources.Steel.isDemanded()) {
+            if (resources.Steel.isDemanded() && !steelConsumptionMissing) {
                 steelWeighting = Number.MAX_SAFE_INTEGER;
             }
             else if (resources.Iron.isDemanded()) {
@@ -11181,6 +11189,10 @@ declare global {
         }
         if (!allowSteelSmelting) {
             steelWeighting = 0;
+            // Pivot to Iron again if Steel is full but Iron is not, just unweighted
+            if (allowIronSmelting && !ironWeighting) {
+                ironWeighting = 1;
+            }
         }
 
         // Steel and Iridium share a part of maxAllowedSteel.

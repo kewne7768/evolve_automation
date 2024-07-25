@@ -7937,7 +7937,7 @@ declare global {
         buildings.GorddonFreighter.addResourceConsumption(resources.Helium_3, 12);
 
         buildings.Alien1VitreloyPlant.addResourceConsumption(resources.Bolognium, 2.5);
-        buildings.Alien1VitreloyPlant.addResourceConsumption(resources.Stanene, 1000);
+        buildings.Alien1VitreloyPlant.addResourceConsumption(resources.Stanene, 100);
         buildings.Alien1VitreloyPlant.addResourceConsumption(resources.Money, 50000);
         buildings.Alien1SuperFreighter.addResourceConsumption(resources.Helium_3, 25);
 

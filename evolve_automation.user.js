@@ -67,6 +67,9 @@
 
     var checkActions = false;
 
+    const CONSUMPTION_BALANCE_MIN = 60; // Seconds of used resources to keep
+    const CONSUMPTION_BALANCE_TARGET = 120; // Seconds of used resources to try producing
+
     // Class definitions
 
     class Job {
@@ -11034,7 +11037,7 @@ declare global {
                 for (let productionCost of fuel.cost) {
                     let resource = productionCost.resource;
                     // Allow using all resources for fuel until 60s of consumption left, unless demanded.
-                    if (resource.currentQuantity < ((maxAllowedUnits * productionCost.quantity) * 60 + productionCost.minRateOfChange) || resource.isDemanded()) {
+                    if (resource.currentQuantity < ((maxAllowedUnits * productionCost.quantity) * CONSUMPTION_BALANCE_MIN + productionCost.minRateOfChange) || resource.isDemanded()) {
                         let remainingRateOfChange = resource.rateOfChange + (m.fueledCount(fuel) * productionCost.quantity) - productionCost.minRateOfChange;
 
                         let affordableAmount = Math.max(0, Math.floor(remainingRateOfChange / productionCost.quantity));
@@ -11097,7 +11100,7 @@ declare global {
         for (let productionCost of steelSmeltingConsumption) {
             let resource = productionCost.resource;
             // Allow using all resources for Steel until 60s of consumption left, unless demanded.
-            if (resource.currentQuantity < ((smelterSteelCount * productionCost.quantity) * 60 + productionCost.minRateOfChange) || resource.isDemanded()) {
+            if (resource.currentQuantity < ((smelterSteelCount * productionCost.quantity) * CONSUMPTION_BALANCE_MIN + productionCost.minRateOfChange) || resource.isDemanded()) {
                 let remainingRateOfChange = resource.rateOfChange + (smelterSteelCount * productionCost.quantity) - productionCost.minRateOfChange;
 
                 let affordableAmount = Math.max(0, Math.floor(remainingRateOfChange / productionCost.quantity));
@@ -12851,7 +12854,7 @@ declare global {
                         if (resourceType.resource.storageRatio > 0.05 || isHungryRace()) {
                             continue;
                         }
-                    } else if (!(resourceType.resource instanceof Support) && resourceType.resource.currentQuantity >= (maxStateOn * 60 * resourceType.rate)) {
+                    } else if (!(resourceType.resource instanceof Support) && resourceType.resource.currentQuantity >= (maxStateOn * CONSUMPTION_BALANCE_MIN * resourceType.rate)) {
                         // If we have more than 60 seconds of max consumption worth then its ok to lose some resources.
                         // This check is mainly so that power producing buildings don't turn off when rate of change goes negative.
                         // That can cause massive loss of life if turning off space habitats :-)
@@ -14225,7 +14228,7 @@ declare global {
                     // Add craftPreserve, plus minimum consumption:
                     // Craftsmen use 1/140 of game's given cost base per tick, before Crafty
                     // Demand 120s worth of production if we were to put all crafters on this resource (effectively 60s with Crafty)
-                    let minExpected = (material.maxQuantity * resource.craftPreserve) + (availableCrafters * (1/140) * 120 * resource.cost[res]);
+                    let minExpected = (material.maxQuantity * resource.craftPreserve) + (availableCrafters * (1/140) * CONSUMPTION_BALANCE_TARGET * resource.cost[res]);
                     material.requestedQuantity = Math.max(material.requestedQuantity, minExpected);
                 }
             }
@@ -14235,7 +14238,7 @@ declare global {
         // We can get the full upgrade-adjusted numbers from FactoryManager, but this is good enough
         const factoryCount = FactoryManager.maxOperating();
         const factoryThreshold = settings.productionFactoryMinIngredients;
-        const factoryMin = (usedResource, req) => Math.max(usedResource.maxQuantity * factoryThreshold, 120 * factoryCount * req);
+        const factoryMin = (usedResource, req) => Math.max(usedResource.maxQuantity * factoryThreshold, CONSUMPTION_BALANCE_TARGET * factoryCount * req);
         if (resources.Stanene.isDemanded()) {
             // 0.02 Nano Tubes/s/slot
             const minNanoTube = factoryMin(resources.Nano_Tube, 0.02);
@@ -14260,8 +14263,8 @@ declare global {
         // TODO: Prioritize missing consumptions of buildings
         // Force crafting Stanene when there's less than 120s worths of consumption (100/s each)
         // This synergizes with the resource check which requires at least 60s
-        if (buildings.Alien1VitreloyPlant.count > 0 && resources.Stanene.currentQuantity < (buildings.Alien1VitreloyPlant.count * 120 * 100)) {
-            resources.Stanene.requestedQuantity = (buildings.Alien1VitreloyPlant.count * 120 * 100);
+        if (buildings.Alien1VitreloyPlant.count > 0 && resources.Stanene.currentQuantity < (buildings.Alien1VitreloyPlant.count * CONSUMPTION_BALANCE_TARGET * 100)) {
+            resources.Stanene.requestedQuantity = (buildings.Alien1VitreloyPlant.count * CONSUMPTION_BALANCE_TARGET * 100);
         }
     }
 

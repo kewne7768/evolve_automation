@@ -11196,6 +11196,11 @@ declare global {
             // Leave at 0/0 if nothing allowed
         }
 
+        if (newWantedSteelCount > maxAllowedSteel) {
+            newWantedIronCount += newWantedSteelCount - maxAllowedSteel;
+            newWantedSteelCount = maxAllowedSteel;
+        }
+
         // Compare to actual smelters.
         smeltAdjust.Iron = newWantedIronCount - smelterIronCount;
         smeltAdjust.Steel = newWantedSteelCount - smelterSteelCount;

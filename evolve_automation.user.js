@@ -11033,8 +11033,8 @@ declare global {
 
                 for (let productionCost of fuel.cost) {
                     let resource = productionCost.resource;
-                    // No need to preserve minimum income when storage is full
-                    if (resource.storageRatio < 0.8) {
+                    // Allow using all resources for fuel until 60s of consumption left, unless demanded.
+                    if (resource.currentQuantity < ((maxAllowedUnits * productionCost.quantity) * 60 + productionCost.minRateOfChange) || resource.isDemanded()) {
                         let remainingRateOfChange = resource.rateOfChange + (m.fueledCount(fuel) * productionCost.quantity) - productionCost.minRateOfChange;
 
                         let affordableAmount = Math.max(0, Math.floor(remainingRateOfChange / productionCost.quantity));
@@ -11096,8 +11096,8 @@ declare global {
         let steelSmeltingConsumption = m.Productions.Steel.cost;
         for (let productionCost of steelSmeltingConsumption) {
             let resource = productionCost.resource;
-            // No need to preserve minimum income when storage is full
-            if (resource.storageRatio < 0.8) {
+            // Allow using all resources for Steel until 60s of consumption left, unless demanded.
+            if (resource.currentQuantity < ((smelterSteelCount * productionCost.quantity) * 60 + productionCost.minRateOfChange) || resource.isDemanded()) {
                 let remainingRateOfChange = resource.rateOfChange + (smelterSteelCount * productionCost.quantity) - productionCost.minRateOfChange;
 
                 let affordableAmount = Math.max(0, Math.floor(remainingRateOfChange / productionCost.quantity));

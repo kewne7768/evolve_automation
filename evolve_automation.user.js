@@ -6871,6 +6871,7 @@ declare global {
         EvalFn extends 'Soldiers' ? number :
         EvalFn extends 'PlanetBiome' ? boolean :
         EvalFn extends 'PlanetTrait' ? boolean :
+        EvalFn extends 'Industry' ? number :
         EvalFn extends 'Other' ? number|string : never; // TODO: Maybe see a way if we can narrow this (only rname is string)...
 
     function _<EvalFn extends EvalFnCheckType>(checkType: EvalFn, arg: EvalFnArg<EvalFn>): EvalFnReturn<EvalFn>;

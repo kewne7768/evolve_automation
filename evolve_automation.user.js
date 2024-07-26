@@ -7477,6 +7477,64 @@ declare global {
             });
         }
 
+        // Boilerplate function to make changes to the entire DB.
+        // This is never called within the script but is kept around in case it's needed in the future.
+        static async userUpdateAllEntriesByCallback(cb) {
+            /* Example:
+            cb = (entry) => {
+                if (!('universe' in entry)) {
+                    let newEntry = structuredClone(entry);
+                    newEntry.universe = 'magic';
+                    return [true, newEntry];
+                }
+                return [false, entry];
+            };
+            */
+            if (typeof cb !== "function") throw `You must specify a callback.`;
+
+            return new Promise(async (resolve, reject) => {
+                if (!this.isAvailable()) { reject("Prestige DB is not enabled or the database is closed."); return; }
+                const transaction = this._openDB.transaction(["resets"], "readwrite");
+                const errorHandler = (e) => {
+                    console.error("PrestigeDB userUpdateAllEntriesByCallback: %o", e);
+                    transaction.abort();
+                    reject(e);
+                };
+                transaction.onerror = errorHandler;
+                const store = transaction.objectStore("resets");
+
+                let updatedEntries = 0;
+                let processedEntries = 0;
+
+                const cursorRequest = store.openCursor();
+                cursorRequest.onerror = errorHandler;
+                cursorRequest.onsuccess = (e) => {
+                    const cursor = cursorRequest.result;
+                    if (!cursor) {
+                        let msg = `Done. Updated ${updatedEntries} entries out of ${processedEntries} total.`;
+                        console.info(msg);
+                        resolve(msg);
+                        return;
+                    }
+                    let entry = cursor.value;
+                    processedEntries++;
+                    if (processedEntries % 100 === 0) {
+                        console.info("Status: Processed %d entries.", processedEntries);
+                    }
+
+                    let [needsUpdate, newEntry] = cb(entry);
+
+                    if (needsUpdate && typeof newEntry === "object") {
+                        updatedEntries++;
+                        let updateReq = cursor.update(newEntry);
+                        // We don't really care for the onsuccess, only error.
+                        updateReq.onerror = errorHandler;
+                    }
+                    cursor.continue();
+                };
+            });
+        }
+
         static isAvailable() {
             return !!this._openDB;
         }

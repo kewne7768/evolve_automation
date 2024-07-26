@@ -7040,16 +7040,17 @@ declare global {
      * alevel: 1|2|3|4|5 // 0*-4*, same as game/script
      * species: "custom" // species id
      * customSpeciesName: null | "Wisp" // IF species is set to custom, the name of the custom species used. null for non-custom
+     * universe: "magic",
      * note: "Wow, this one sucked." | null // User-inputted note
      * graphExclude: false // If true, filters from graph displays, set by user in TBD UI to remove bad/special/etc runs
      * logString: "Reset: Ascension, Species: Custom" // user-customized string
-     * milestones: { "tech-merchandising": 1234, "TouristCenter": 2345 } // may be empty, too
-     * stars: ["junk_gene"] // TBD but intended to be for the alevel-providing challenges
-     * challenges: ["steelen", "joyless"] // TBD but intended to be for other challenges (this is split for filtering purposes). Recorded at end of run.
-     * rewards: {} // NYI
-     * extra: {} // TBD but some kind of extension mechanism?
+     * stars: ["junk_gene"] // Challenges that contribute to alevel.
+     * challenges: ["steelen", "joyless"] // Challenges that don't contribute to alevel. Separated for easier filtering.
+     * milestones: { "tech-merchandising": 1234, "TouristCenter": 2345 } // Set by snippet hook script.
+     * rewards: {} // Set by snippet hook script. Intended use is to store reward info.
+     * extra: {} // Set by snippet hook script. Intended use is to store misc data.
      * }, more of that]
-     * For future notes: no object key will ever start with "x".
+     * For future notes: no object key will ever start with "x". Snippet hooks should start their custom fields with an x, if extra doesn't suffice.
      *
      * Markers exist for the user UI only. They're a way to store dateStart.
      * These can be prestigeType bound.
@@ -7199,6 +7200,7 @@ declare global {
                 alevel: game.alevel(),
                 species: game.global.race.species,
                 customSpeciesName: game.global.race.species === "custom" ? game.races.custom?.name : null,
+                universe: game.global.race.universe,
                 note: null,
                 graphExclude: false,
                 logString: logString,

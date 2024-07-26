@@ -7301,6 +7301,51 @@ declare global {
             });
         }
 
+        static async uiDownloadCSV(bannedColumns) {
+            return new Promise(async (resolve, reject) => {
+                if (!this.isAvailable()) { reject("Prestige DB is not enabled or the database is closed."); return; }
+                let entries = await this.getPrestiges({});
+
+                // CSV flattening action! We try to stick to RFC4180.
+                let columns = new Set();
+                // Round 1: Flatten objects. Turns it into {"days": 234, "milestones_Womlings": 123} and the like.
+                // We also collect column names.
+                entries = entries.map(entry => {
+                    if (bannedColumns) bannedColumns.forEach(ban => {delete entry[ban]});
+                    return Object.fromEntries(Object.entries(entry).map(([k, v]) => {
+                        columns.add(k); // Could add a .has but .add also checks dupes
+                        if (typeof v !== "object" || v === null) return [[k, v]]; // extra layer, needs to survive flattening
+
+                        return Object.entries(v).map(([sk, sv]) => {
+                            let fullKey = `${k}_${sk}`;
+                            columns.add(fullKey);
+                            return [fullKey, sv];
+                        });
+                    }).flat());
+                });
+
+                // Pass 2
+                const csvString = (v) => {
+                    if (v === null || v === undefined) return '""';
+                    if (typeof v === "number") return `"${v}"`;
+                    if (typeof v === "boolean") return v ? '"1"' : '"0"';
+                    if (typeof v === "string") return `"${v.replace(/"/g, '""')}"`;
+                    return '"UNKNOWN_VALUE"';
+                };
+                let columnsArr = Array.from(columns);
+
+                let csv = columnsArr.map(csvString).join(",") + "\r\n";
+                entries.forEach(entry => {
+                    csv += columnsArr.map(col => {
+                        return csvString(entry[col]);
+                    }).join(",") + "\r\n";
+                });
+
+                triggerFileDownload(csv, "evolve-prestige-entries.csv");
+                resolve("Done.");
+            });
+        }
+
         static async uiGraphs() {
             // We need the thing to be visible first so we can't use the builder function.
             // Otherwise Chart.js doesn't like it.
@@ -20233,6 +20278,20 @@ declare global {
             let result;
             try {
                 result = await PrestigeDBManager.uiDownloadAll();
+            }
+            catch (e) {
+                result = `⚠️ ${e}`;
+            }
+            progressText.text(result);
+        }).appendTo(prestigeDBsection);
+
+        let csvButton = $(`<button class="button" style="margin: 6px 6px 6px 0" title="This CSV is only for use in other apps and cannot be re-imported into this script. Hold your 10X key to remove logString field.">Get CSV</button>`).on("click", async (e) => {
+            progressText.text("Running");
+            let result;
+            try {
+                let banned = undefined;
+                if (KeyManager._userState.x10) banned = ["logString"];
+                result = await PrestigeDBManager.uiDownloadCSV(banned);
             }
             catch (e) {
                 result = `⚠️ ${e}`;

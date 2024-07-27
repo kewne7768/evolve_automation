@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.123
+// @version      3.3.1.124
 // @description  try to take over the world!
 // @downloadURL  https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.user.js
 // @updateURL    https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.meta.js
@@ -1824,17 +1824,14 @@
             let override = this.enabledOverrides?.length > 0 ? evaluateOverride(this.enabledOverrides, `triggers---${this.seq}---enabledOverrides`, "boolean") : OVERRIDE_NO_VALUE;
             if ((override !== OVERRIDE_NO_VALUE ? override : this.enabled) !== true) return false;
 
-            if (this.requirementType === "unlocked" && techIds[this.requirementId].isUnlocked()) {
-                return true;
-            }
-            if (this.requirementType === "researched" && techIds[this.requirementId].isResearched()) {
-                return true;
-            }
-            if (this.requirementType === "built" && buildingIds[this.requirementId].count >= this.requirementCount) {
-                return true;
-            }
-            if (this.requirementType === "chain" && (this.priority < 1 || TriggerManager.priorityList[this.priority - 1]?.complete)) {
-                return true;
+            if (this.requirementType === "chain") {
+                return this.priority < 1 || TriggerManager.priorityList[this.priority - 1]?.complete;
+            } else if (checkTypes[this.requirementType]) {
+                if (retBools.includes(this.requirementType)) {
+                    return checkTypes[this.requirementType].fn(this.requirementId) == this.requirementCount
+                } else {
+                    return checkTypes[this.requirementType].fn(this.requirementId) >= this.requirementCount;
+                }
             }
             return false;
         }
@@ -1844,47 +1841,29 @@
                 return;
             }
 
-            let oldType = this.requirementType;
-            this.requirementType = requirementType;
-            this.complete = false;
-
-            if ((this.requirementType === "unlocked" || this.requirementType === "researched") &&
-                (oldType === "unlocked" || oldType === "researched")) {
-                return; // Both researches, old ID is still valid, and preserved.
-            }
-            if (this.requirementType === "unlocked" || this.requirementType === "researched") {
-                this.requirementId = "tech-club";
-                this.requirementCount = 0;
-                return;
-            }
-            if (this.requirementType === "built") {
-                this.requirementId = "city-basic_housing";
-                this.requirementCount = 1;
-                return;
-            }
-            if (this.requirementType === "chain") {
+            if (requirementType === "chain") {
+                this.requirementType = requirementType;
                 this.requirementId = "";
                 this.requirementCount = 0;
-                return;
-            }
-        }
-
-        updateRequirementId(requirementId) {
-            if (requirementId === this.requirementId) {
-                return;
+                return; // Special case
             }
 
-            this.requirementId = requirementId;
+            if (!checkTypes[requirementType]) {
+                return; // Invalid type
+            }
+
+            let oldArg = checkTypes[this.requirementType]?.arg ?? null;
+            let oldOpts = checkTypes[this.requirementType]?.options ?? null;
+            let newArg = checkTypes[requirementType].arg
+            let newOpts = checkTypes[requirementType].options;
+
+            this.requirementType = requirementType;
+            this.requirementCount = 1;
             this.complete = false;
-        }
 
-        updateRequirementCount(requirementCount) {
-            if (requirementCount === this.requirementCount) {
-                return;
+            if (oldArg !== newArg || oldOpts !== newOpts) {
+                this.requirementId = checkTypes[this.requirementType].def;
             }
-
-            this.requirementCount = requirementCount;
-            this.complete = false;
         }
 
         updateActionType(actionType) {
@@ -1910,24 +1889,6 @@
                 this.actionCount = 1;
                 return;
             }
-        }
-
-        updateActionId(actionId) {
-            if (actionId === this.actionId) {
-                return;
-            }
-
-            this.actionId = actionId;
-            this.complete = false;
-        }
-
-        updateActionCount(actionCount) {
-            if (actionCount === this.actionCount) {
-                return;
-            }
-
-            this.actionCount = actionCount;
-            this.complete = false;
         }
     }
 
@@ -9154,9 +9115,9 @@ declare global {
         // Add default triggers only on reset, or first run, but not on casual update
         if (reset || !settingsRaw.hasOwnProperty("autoTrigger")) {
             TriggerManager.priorityList = [];
-            TriggerManager.AddTrigger("built", "space-moon_mission", 1, "build", "space-moon_base", 1, true);
-            TriggerManager.AddTrigger("built", "space-moon_base", 1, "build", "space-iridium_mine", 1, true);
-            TriggerManager.AddTrigger("built", "space-moon_base", 1, "build", "space-helium_mine", 1, true);
+            TriggerManager.AddTrigger("BuildingCount", "space-moon_mission", 1, "build", "space-moon_base", 1, true);
+            TriggerManager.AddTrigger("BuildingCount", "space-moon_base", 1, "build", "space-iridium_mine", 1, true);
+            TriggerManager.AddTrigger("BuildingCount", "space-moon_base", 1, "build", "space-helium_mine", 1, true);
             settingsRaw.triggers = JSON.parse(JSON.stringify(TriggerManager.priorityList));
         }
         // If not resetting, try to patch existing triggers up for addition of .enabled
@@ -9439,8 +9400,23 @@ declare global {
         }
         // Migrate pre-overrides settings
         settingsRaw.triggers.forEach(t => {
-            if (techIds["tech-" + t.actionId]) { t.actionId = "tech-" + t.actionId; }
-            if (techIds["tech-" + t.requirementId]) { t.requirementId = "tech-" + t.requirementId; }
+            if ((t.requirementType === "unlocked" || t.requirementType === "researched") && techIds["tech-" + t.requirementId]) {
+                t.requirementId = "tech-" + t.requirementId;
+            }
+            if (t.actionType === "research" && techIds["tech-" + t.actionId]) {
+                t.actionId = "tech-" + t.actionId;
+            }
+            if (t.requirementType === "unlocked") {
+                t.requirementType = "ResearchUnlocked";
+                t.requirementCount = 1;
+            }
+            if (t.requirementType === "researched") {
+                t.requirementType = "ResearchComplete";
+                t.requirementCount = 1;
+            }
+            if (t.requirementType === "built") {
+                t.requirementType = "BuildingCount";
+            }
         });
         if (settingsRaw.hasOwnProperty("productionPrioritizeDemanded")) { // Replace checkbox with list
             settingsRaw.productionFoundryWeighting = settingsRaw.productionPrioritizeDemanded ? "demanded" : "none";
@@ -16373,7 +16349,7 @@ declare global {
                       o === "alevel" ? (game.alevel() - 1) :
                       o === "tknow" ? (state.knowledgeRequiredByTechs) : o,
     }
-    // TODO: Make trigger use all this checks, migration will be a bit tedius, but doable
+
     const checkTypes = {
         String: { fn: (v) => v, arg: "string", def: "none", desc: "Returns string" },
         Number: { fn: (v) => v, arg: "number", def: 0, desc: "Returns number" },
@@ -16425,6 +16401,9 @@ declare global {
         Industry: { fn: (r) => argMap.industry(r), ...argType.industry, desc: "Returns information about Industry buildings" },
         Other: { fn: (o) => argMap.other(o), ...argType.other, desc: "Other uncategorized variables" },
     }
+
+    // TODO: This thing isn't very nice. Ideally each check should declare return type, not only input type. But for now it's only used with triggers which only works with numbers and booleans, so it's fine for now.
+    const retBools = ["Boolean", "BuildingUnlocked", "BuildingClickable", "BuildingAffordable", "BuildingQueued", "ProjectUnlocked", "JobUnlocked", "ResearchUnlocked", "ResearchComplete", "ResourceUnlocked", "ResourceSatisfied", "ResourceDemanded", "RacePillared", "RaceGenus", "MimicGenus", "ResetType", "Challenge", "Universe", "Government", "Governor", "PlanetBiome", "PlanetTrait"];
 
     // Eval shortener
     function _(check, arg){
@@ -17684,7 +17663,7 @@ declare global {
             <tr>
               <th class="has-text-warning" style="width:16%">Type</th>
               <th class="has-text-warning" style="width:18%">Id</th>
-              <th class="has-text-warning" style="width:8%">#</th>
+              <th class="has-text-warning" style="width:8%" title="Numerical variables compared to this value using '>=', boolean variables - using '=='. String variables not currently supported by triggers.">#</th>
               <th class="has-text-warning" style="width:16%">Type</th>
               <th class="has-text-warning" style="width:18%">Id</th>
               <th class="has-text-warning" style="width:8%">#</th>
@@ -17738,7 +17717,7 @@ declare global {
     }
 
     function addTriggerSetting() {
-        let trigger = TriggerManager.AddTrigger("unlocked", "tech-club", 0, "research", "tech-club", 0, true);
+        let trigger = TriggerManager.AddTrigger("ResearchUnlocked", "tech-club", 1, "research", "tech-club", 0, true);
         updateSettingsFromState();
 
         let tableBodyNode = $('#script_triggerTableBody');
@@ -17797,13 +17776,13 @@ declare global {
         triggerElement.empty().off("*");
 
         // Requirement Type
+        let types = Object.entries(checkTypes).map(([id, type]) => `<option value="${id}" title="${type.desc}">${id.replace(/([A-Z])/g, ' $1').trim()}</option>`).join();
         let typeSelectNode = $(`
-          <select>
-            <option value = "unlocked" title = "This condition is met when technology is shown in research tab">Unlocked</option>
-            <option value = "researched" title = "This condition is met when technology is researched">Researched</option>
-            <option value = "built" title = "This condition is met when you have 'count' or greater amount of buildings">Built</option>
+          <select style="width: 100%">
             <option value = "chain" title = "This condition is met when above trigger is complete, always true for first trigger in list">Chain</option>
+            ${types}
           </select>`);
+
         typeSelectNode.val(trigger.requirementType);
 
         triggerElement.append(typeSelectNode);
@@ -17813,10 +17792,6 @@ declare global {
 
             buildTriggerRequirementId(trigger);
             buildTriggerRequirementCount(trigger);
-
-            buildTriggerActionType(trigger);
-            buildTriggerActionId(trigger);
-            buildTriggerActionCount(trigger);
 
             updateSettingsFromState();
         });
@@ -17828,11 +17803,13 @@ declare global {
         let triggerElement = $('#script_trigger_' + trigger.seq).children().eq(1);
         triggerElement.empty().off("*");
 
-        if (trigger.requirementType === "researched" || trigger.requirementType === "unlocked") {
-            triggerElement.append(buildTriggerListInput(techIds, trigger, "requirementId"));
-        }
-        if (trigger.requirementType === "built") {
-            triggerElement.append(buildTriggerListInput(buildingIds, trigger, "requirementId"));
+        let check = checkTypes[trigger.requirementType];
+        if (check) {
+            triggerElement.append(buildInputNode(check.arg, check.options, trigger.requirementId, function(result){
+                trigger.requirementId = result;
+                trigger.complete = false;
+                updateSettingsFromState();
+            }));
         }
     }
 
@@ -17840,8 +17817,13 @@ declare global {
         let triggerElement = $('#script_trigger_' + trigger.seq).children().eq(2);
         triggerElement.empty().off("*");
 
-        if (trigger.requirementType === "built") {
-            triggerElement.append(buildTriggerCountInput(trigger, "requirementCount"));
+        if (checkTypes[trigger.requirementType]) {
+            let retType = retBools.includes(trigger.requirementType) ? "boolean" : "number";
+            triggerElement.append(buildInputNode(retType, null, trigger.requirementCount, function(result){
+                trigger.requirementCount = Number(result);
+                trigger.complete = false;
+                updateSettingsFromState();
+            }));
         }
     }
 
@@ -17851,7 +17833,7 @@ declare global {
 
         // Action Type
         let typeSelectNode = $(`
-          <select>
+          <select style="width: 100%">
             <option value = "research" title = "Research technology">Research</option>
             <option value = "build" title = "Build buildings up to 'count' amount">Build</option>
             <option value = "arpa" title = "Build projects up to 'count' amount">A.R.P.A.</option>
@@ -17876,14 +17858,18 @@ declare global {
         let triggerElement = $('#script_trigger_' + trigger.seq).children().eq(4);
         triggerElement.empty().off("*");
 
-        if (trigger.actionType === "research") {
-            triggerElement.append(buildTriggerListInput(techIds, trigger, "actionId"));
-        }
-        if (trigger.actionType === "build") {
-            triggerElement.append(buildTriggerListInput(buildingIds, trigger, "actionId"));
-        }
-        if (trigger.actionType === "arpa") {
-            triggerElement.append(buildTriggerListInput(arpaIds, trigger, "actionId"));
+
+        let argDef = trigger.actionType === "research" ? argType.research :
+                     trigger.actionType === "build" ? argType.building :
+                     trigger.actionType === "arpa" ? argType.project :
+                     null;
+
+        if (argDef) {
+            triggerElement.append(buildInputNode(argDef.arg, argDef.options, trigger.actionId, function(result){
+                trigger.actionId = result;
+                trigger.complete = false;
+                updateSettingsFromState();
+            }));
         }
     }
 
@@ -17892,7 +17878,11 @@ declare global {
         triggerElement.empty().off("*");
 
         if (trigger.actionType === "build" || trigger.actionType === "arpa") {
-            triggerElement.append(buildTriggerCountInput(trigger, "actionCount"));
+            triggerElement.append(buildInputNode("number", null, trigger.actionCount, function(result){
+                trigger.actionCount = Number(result);
+                trigger.complete = false;
+                updateSettingsFromState();
+            }));
         }
     }
 
@@ -17918,82 +17908,6 @@ declare global {
             updateSettingsFromState();
             updateTriggerSettingsContent();
         });
-    }
-
-    function buildTriggerListInput(list, trigger, property){
-        let typeSelectNode = $('<input style="width:100%"></input>');
-
-        // Event handler
-        let onChange = function(event, ui) {
-            event.preventDefault();
-
-            // If it wasn't selected from list
-            if(ui.item === null){
-                let typedName = Object.values(list).find(obj => obj.name === this.value);
-                if (typedName !== undefined){
-                    ui.item = {label: this.value, value: typedName._vueBinding};
-                }
-            }
-
-            // We have an item to switch
-            if (ui.item !== null && list.hasOwnProperty(ui.item.value)) {
-                if (trigger[property] === ui.item.value) {
-                    return;
-                }
-
-                trigger[property] = ui.item.value;
-                trigger.complete = false;
-
-                updateSettingsFromState();
-
-                this.value = ui.item.label;
-                return;
-            }
-
-            // No building selected, don't change trigger, just restore old name in text field
-            if (list.hasOwnProperty(trigger[property])) {
-                this.value = list[trigger[property]].name;
-                return;
-            }
-        };
-
-        typeSelectNode.autocomplete({
-            minLength: 2,
-            delay: 0,
-            source: function(request, response) {
-                let matcher = new RegExp($.ui.autocomplete.escapeRegex(request.term), "i");
-                response(Object.values(list)
-                  .filter(item => matcher.test(item.name))
-                  .map(item => ({label: item.name, value: item._vueBinding})));
-            },
-            select: onChange, // Dropdown list click
-            focus: onChange, // Arrow keys press
-            change: onChange // Keyboard type
-        });
-
-        if (list.hasOwnProperty(trigger[property])) {
-            typeSelectNode.val(list[trigger[property]].name);
-        }
-
-        return typeSelectNode;
-    }
-
-    function buildTriggerCountInput(trigger, property) {
-        let textBox = $('<input type="text" class="input is-small" style="height: 22px; width:100%; padding: 5px"/>');
-        textBox.val(trigger[property]);
-
-        textBox.on('change', function() {
-            let parsedValue = getRealNumber(textBox.val());
-            if (!isNaN(parsedValue)) {
-                trigger[property] = parsedValue;
-                trigger.complete = false;
-
-                updateSettingsFromState();
-            }
-            textBox.val(trigger[property]);
-        });
-
-        return textBox;
     }
 
     function buildActiveTargetsUI() {

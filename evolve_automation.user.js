@@ -7270,20 +7270,34 @@ declare global {
                 let entries = await this.getPrestiges({});
 
                 // CSV flattening action! We try to stick to RFC4180.
-                let columns = new Set();
+                // Initialize set with a few columns that should always be near the start.
+                let columns = new Set(["reset", "date", "days", "prestigeType"]);
+
                 // Round 1: Flatten objects. Turns it into {"days": 234, "milestones_Womlings": 123} and the like.
                 // We also collect column names.
                 entries = entries.map(entry => {
                     if (bannedColumns) bannedColumns.forEach(ban => {delete entry[ban]});
                     return Object.fromEntries(Object.entries(entry).map(([k, v]) => {
-                        columns.add(k); // Could add a .has but .add also checks dupes
-                        if (typeof v !== "object" || v === null) return [[k, v]]; // extra layer, needs to survive flattening
-
-                        return Object.entries(v).map(([sk, sv]) => {
-                            let fullKey = `${k}_${sk}`;
-                            columns.add(fullKey);
-                            return [fullKey, sv];
-                        });
+                        // These all need to be in an extra layer to survive flattening.
+                        if (typeof v === "object" && v !== null) {
+                            if (Array.isArray(v)) {
+                                columns.add(k);
+                                // Converted to a single string. String arrays get sorted, other arrays get preserved.
+                                return [[k, (v.length && typeof v[0] === "string") ? v.sort().join(",") : v.join(",")]];
+                            }
+                            else {
+                                // Don't add column for the object itself, only the keys inside.
+                                return Object.entries(v).map(([sk, sv]) => {
+                                    let fullKey = `${k}_${sk}`;
+                                    columns.add(fullKey);
+                                    return [fullKey, sv];
+                                });
+                            }
+                        }
+                        else {
+                            columns.add(k);
+                            return [[k, v]];
+                        }
                     }).flat());
                 });
 

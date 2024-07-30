@@ -1811,12 +1811,6 @@
                 this.complete = true;
                 return true;
             }
-            // HACK: Consider "build Space Dock" trigger complete when not in Bioseed and the Space Dock is buildable.
-            // Very ugly hack.
-            if (this.actionType === "build" && settings.prestigeType !== "bioseed" && buildingIds[this.actionId] === buildings.GasSpaceDock && this.isActionPossible()) {
-                this.complete = true;
-                return true;
-            }
             return false;
         }
 

@@ -16088,7 +16088,11 @@ declare global {
                             evals.push(override.arg2);
                         }
                     }));
-
+                    (saveState.triggers ?? []).forEach(trigger => {
+                        if (trigger.requirementType === "Eval") {
+                            evals.push(trigger.requirementId);
+                        }
+                    });
                     Object.values(saveState.overrides?.log_prestige_format ?? []).forEach(prestige_log_format_override => {
                         if (prestige_log_format_override.ret.includes("{eval:")) {
                             evals.push(prestige_log_format_override.ret);
@@ -16419,6 +16423,8 @@ declare global {
 
     // TODO: This thing isn't very nice. Ideally each check should declare return type, not only input type. But for now it's only used with triggers which only works with numbers and booleans, so it's fine for now.
     const retBools = ["Boolean", "BuildingUnlocked", "BuildingClickable", "BuildingAffordable", "BuildingQueued", "ProjectUnlocked", "JobUnlocked", "ResearchUnlocked", "ResearchComplete", "ResourceUnlocked", "ResourceSatisfied", "ResourceDemanded", "RacePillared", "RaceGenus", "MimicGenus", "ResetType", "Challenge", "Universe", "Government", "Governor", "PlanetBiome", "PlanetTrait"];
+    // No need to show primitives and string function in triggers UI. Boolean kept for permanent triggers.
+    const overrideOnlyChecks = ["String", "Number", "RaceId"];
 
     // Eval shortener
     function _(check, arg){
@@ -17791,7 +17797,9 @@ declare global {
         triggerElement.empty().off("*");
 
         // Requirement Type
-        let types = Object.entries(checkTypes).map(([id, type]) => `<option value="${id}" title="${type.desc}">${id.replace(/([A-Z])/g, ' $1').trim()}</option>`).join();
+        let types = Object.entries(checkTypes)
+          .filter((c) => !overrideOnlyChecks.includes(c[0]))
+          .map(([id, type]) => `<option value="${id}" title="${type.desc}">${id.replace(/([A-Z])/g, ' $1').trim()}</option>`).join();
         let typeSelectNode = $(`
           <select style="width: 100%">
             <option value = "chain" title = "This condition is met when above trigger is complete, always true for first trigger in list">Chain</option>

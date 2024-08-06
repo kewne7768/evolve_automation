@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.124
+// @version      3.3.1.127
 // @description  try to take over the world!
 // @downloadURL  https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.user.js
 // @updateURL    https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.meta.js
@@ -456,7 +456,7 @@
         }
 
         isRoutesUnlocked() {
-            return this.isUnlocked() && (!game.global.race['artifical'] || this !== resources.Food) && ((game.global.race['banana'] && this === resources.Food) || (game.global.tech['trade'] && !game.global.race['terrifying']));
+            return this.isUnlocked() && !(this === resources.Food && (game.global.race['artifical'] || game.global.race['fasting'])) && ((game.global.race['banana'] && this === resources.Food) || (game.global.tech['trade'] && !game.global.race['terrifying']));
         }
 
         isManagedStorage() {
@@ -2093,6 +2093,7 @@
         [{id:"banana", trait:"banana"}],
         [{id:"truepath", trait:"truepath"}],
         [{id:"lone_survivor", trait:"lone_survivor"}],
+        [{id:"fasting", trait:"fasting"}],
     ];
     const governors = ["soldier", "criminal", "entrepreneur", "educator", "spiritual", "bluecollar", "noble", "media", "sports", "bureaucrat"];
     const evolutionSettingsToStore = ["userEvolutionTarget", "prestigeType", ...challenges.map(c => "challenge_" + c[0].id)];
@@ -2286,6 +2287,7 @@
         Unemployed: new BasicJob("unemployed", "Unemployed"),
         Colonist: new Job("colonist", "Colonist"),
         Teamster: new BasicJob("teamster", "Teamster", {smart: true}),
+        Meditator: new BasicJob("meditator", "Meditator", {smart: true}),
         Hunter: new BasicJob("hunter", "Hunter", {serve: true, smart: true}),
         Farmer: new BasicJob("farmer", "Farmer", {serve: true, smart: true}),
         //Forager: new BasicJob("forager", "Forager", {serve: true}),
@@ -2378,6 +2380,7 @@
         Temple: new Action("Temple", "city", "temple", ""),
         Shrine: new Action ("Shrine", "city", "shrine", ""),
         MeditationChamber: new Action("Meditation Chamber", "city", "meditation", ""),
+        Banquet: new Action("Banquet Hall", "city", "banquet", ""),
         University: new Action("University", "city", "university", "", {knowledge: true}),
         Library: new Action("Library", "city", "library", "", {knowledge: true}),
         Wardenclyffe: new Action("Wardenclyffe", "city", "wardenclyffe", "", {knowledge: true}),
@@ -3239,7 +3242,7 @@
           () => "Will be destroyed after impact",
           () => settings.buildingWeightingTemporal
       ],[
-          () => true, // TODO: Only used for name contest, no need to check at other game stages
+          () => game.global.tech.tau_gas === 1, // Only used for name contest, no need to check at other game stages
           (building) => building.is.random,
           () => "Randomized weighting",
           () => 1 + Math.random() // Fluctuate weight to pick random item
@@ -4058,6 +4061,9 @@
                     + buildings.RedFactory.stateOnCount
                     + buildings.AlphaMegaFactory.stateOnCount * 2
                     + buildings.TauFactory.stateOnCount * (haveTech("isolation") ? 5 : 3);
+            if (!game.global.city.factory) {
+                return max;
+            }
             for (let key in this.Productions) {
                 let production = this.Productions[key];
                 if (production.unlocked && !production.enabled) {
@@ -8222,6 +8228,7 @@ declare global {
         priorityList.push(buildings.TauForgeHorseshoe); // Hooved trait
         priorityList.push(buildings.SacrificialAltar); // Cannibalize trait
         priorityList.push(buildings.MeditationChamber); // Calm trait
+        priorityList.push(buildings.Banquet); // Fasting reward
 
         priorityList.push(buildings.DwarfMission);
         priorityList.push(buildings.DwarfEleriumReactor);
@@ -8877,6 +8884,7 @@ declare global {
         };
         setBreakpoints(jobs.Colonist, -1, -1, -1);
         setBreakpoints(jobs.Teamster, 10, -1, -1);
+        setBreakpoints(jobs.Meditator, -1, -1, -1);
         setBreakpoints(jobs.Hunter, -1, -1, -1);
         setBreakpoints(jobs.Farmer, -1, -1, -1);
         //setBreakpoints(jobs.Forager, 4, 10, 0);
@@ -8945,7 +8953,7 @@ declare global {
             buildingsLimitPowered: true,
             buildingTowerSuppression: 100,
             buildingBuildPassCount: 1,
-            buildingConsumptionCheck: "onePerTick",
+            buildingConsumptionCheck: "perResource",
             buildingsTransportGem: false,
             buildingsBestFreighter: false,
             buildingsUseMultiClick: false,
@@ -9864,7 +9872,10 @@ declare global {
                     planet.achieve++;
                 }
             }
-            // TODO: Pick Oceanic for Madagascar Tree
+            // Target oceanic for Madagascar Tree, unless current god is already sharkin
+            if (!isAchievementUnlocked("madagascar_tree", alevel) && planet.biome === "oceanic" && game.global.race.gods !== "sharkin") {
+                planet.achieve++;
+            }
         }
 
         // Now calculate weightings
@@ -10761,6 +10772,17 @@ declare global {
                         }
                         jobsToAssign = Math.min(jobsToAssign, jobMax[j]);
                     }
+                    if (job === jobs.Meditator) {
+                        if (jobMax[j] === undefined) {
+                            let threshold = 1.25;
+                            threshold += traitVal('slow_digestion', 0);
+                            // TODO: slitheryn fathom
+                            threshold += traitVal('humpback', 0);
+                            threshold -= traitVal('atrophy', 0);
+                            jobMax[j] = Math.ceil((resources.Population.currentQuantity / 100 * getFoodConsume() - threshold) / (0.03 * traitVal('high_pop', 1, '=')));
+                        }
+                        jobsToAssign = Math.min(jobsToAssign, jobMax[j]);
+                    }
                 }
 
                 if (j === defaultIndex && minDefault > 0) {
@@ -10902,6 +10924,8 @@ declare global {
                 jobs.Farmer.setAsDefault();
             } else if (jobs.Teamster.isManaged()) {
                 jobs.Teamster.setAsDefault();
+            } else if (jobs.Meditator.isManaged()) {
+                jobs.Meditator.setAsDefault();
             } else {
                 // Fallback case: will really only happen in scenarios where no basic jobs are useful and pop is excess.
                 // Like high-prestige low-challenge OD.
@@ -12281,7 +12305,7 @@ declare global {
         // Uses exposed action handlers, bypassing vue - they much faster, and that's important with a lot of calls
         let resPerClick = getResourcesPerClick();
         let amount = 0;
-        if (buildings.Food.isClickable()){
+        if (buildings.Food.isClickable() && !game.global.race['fasting']){
             if (haveTech("conjuring", 1)) {
                 amount = Math.floor(Math.min((resources.Food.maxQuantity - resources.Food.currentQuantity) / (resPerClick * 10), resources.Mana.currentQuantity, settings.buildingClickPerTick));
                 resources.Mana.currentQuantity -= amount;
@@ -12344,7 +12368,7 @@ declare global {
                 slaughter.action();
             }
             resources.Lumber.currentQuantity = Math.min(resources.Lumber.currentQuantity + amount * resPerClick, resources.Lumber.maxQuantity);
-            if (game.global.race['soul_eater'] && haveTech("primitive")){
+            if (game.global.race['soul_eater'] && haveTech("primitive") && !game.global.race['fasting']){
                 resources.Food.currentQuantity = Math.min(resources.Food.currentQuantity + amount * resPerClick, resources.Food.maxQuantity);
             }
             if (resources.Furs.isUnlocked()) {
@@ -12784,7 +12808,8 @@ declare global {
                         //let woundCap = Math.ceil((game.global.space.fob.enemy + (game.global.tech.outer >= 4 ? 75 : 62.5)) / 5) - protectedSoldiers;
                         //let maxLanders = getHealingRate() < woundCap ? Math.floor((getHealingRate() + protectedSoldiers) / 1.5) : Number.MAX_SAFE_INTEGER;
                         let reservedSoldiers = settings.autoFleet ? FleetManagerOuter.nextShipDesiredCrew : 0;
-                        let healthySquads = Math.floor((WarManager.currentSoldiers - WarManager.wounded - reservedSoldiers) / (3 * traitVal('high_pop', 0, 1)));
+                        let dispatchSoldiers = WarManager.currentSoldiers - Math.min(0, WarManager.wounded - Math.floor(getHealingRate()));
+                        let healthySquads = Math.floor(Math.max(0, dispatchSoldiers - reservedSoldiers) / (3 * traitVal('high_pop', 0, 1)));
                         maxStateOn = Math.min(maxStateOn, healthySquads /*, maxLanders*/ );
                     }
                 }
@@ -12997,7 +13022,7 @@ declare global {
 
                     if (resourceType.resource === resources.Food) {
                         // Wendigo doesn't store food. Let's assume it's always available.
-                        if (resourceType.resource.storageRatio > 0.05 || isHungryRace()) {
+                        if (resourceType.resource.storageRatio > 0.05 || isHungryRace() || game.global.race['fasting']) {
                             continue;
                         }
                     } else if (!(resourceType.resource instanceof Support) && resourceType.resource.currentQuantity >= (maxStateOn * CONSUMPTION_BALANCE_MIN * resourceType.rate)) {
@@ -14227,7 +14252,7 @@ declare global {
         if (settings.buildingAlwaysClick || (settings.autoBuild && (resources.Population.currentQuantity <= 15 || (buildings.RockQuarry.count < 1 && !game.global.race['sappy'])))) {
             let resPerClick = getResourcesPerClick() * ticksPerSecond();
             let conjureMod = haveTech("conjuring", 2) ? 10 : 1;
-            if (buildings.Food.isClickable()) {
+            if (buildings.Food.isClickable() && !game.global.race['fasting']) {
                 resources.Food.rateOfChange += resPerClick * settings.buildingClickPerTick * conjureMod;
             }
             if (buildings.Lumber.isClickable()) {
@@ -14576,6 +14601,7 @@ declare global {
           + (game.global.tech.queue ? 1 : 0) // Queue unlocked
           + (game.global.tech.r_queue ? 1 : 0) // Research queue unlocked
           + (game.global.tech.govern ? 1 : 0) // Government unlocked
+          + (game.global.tech.spy >= 2 ? 1 : 0) // SpyOp governor task
           + (game.global.tech.trade ? 1 : 0) // Trade Routes unlocked
           + (resources.Crates.isUnlocked() ? 1 : 0) // Crates in storage tab
           + (resources.Containers.isUnlocked() ? 1 : 0) // Containers in storage tab
@@ -16439,8 +16465,8 @@ declare global {
 
     // TODO: This thing isn't very nice. Ideally each check should declare return type, not only input type. But for now it's only used with triggers which only works with numbers and booleans, so it's fine for now.
     const retBools = ["Boolean", "BuildingUnlocked", "BuildingClickable", "BuildingAffordable", "BuildingQueued", "ProjectUnlocked", "JobUnlocked", "ResearchUnlocked", "ResearchComplete", "ResourceUnlocked", "ResourceSatisfied", "ResourceDemanded", "RacePillared", "RaceGenus", "MimicGenus", "ResetType", "Challenge", "Universe", "Government", "Governor", "PlanetBiome", "PlanetTrait"];
-    // No need to show primitives and string function in triggers UI. Boolean kept for permanent triggers.
-    const overrideOnlyChecks = ["String", "Number", "RaceId"];
+    // No need to show primitives and string function in triggers UI.
+    const overrideOnlyChecks = ["Boolean", "String", "Number", "RaceId"];
 
     // Eval shortener
     function _(check, arg){
@@ -17781,40 +17807,8 @@ declare global {
         triggerElement.empty().off("*");
 
         // Requirement Type
-        let typeSelectNode = $(`
-          <select>
-            <option value = "unlocked" title = "This condition is met when technology is shown in research tab">Unlocked</option>
-            <option value = "researched" title = "This condition is met when technology is researched">Researched</option>
-            <option value = "built" title = "This condition is met when you have 'count' or greater amount of buildings">Built</option>
-            <option value = "chain" title = "This condition is met when above trigger is complete, always true for first trigger in list">Chain</option>
-          </select>`);
-        typeSelectNode.val(trigger.requirementType);
-
-        triggerElement.append(typeSelectNode);
-
-        typeSelectNode.on('change', function () {
-            trigger.updateRequirementType(this.value);
-
-            buildTriggerRequirementId(trigger);
-            buildTriggerRequirementCount(trigger);
-
-            buildTriggerActionType(trigger);
-            buildTriggerActionId(trigger);
-            buildTriggerActionCount(trigger);
-
-            updateSettingsFromState();
-        });
-
-        return;
-    }
-
-    function buildTriggerRequirementType(trigger) {
-        let triggerElement = $('#script_trigger_' + trigger.seq).children().eq(0);
-        triggerElement.empty().off("*");
-
-        // Requirement Type
         let types = Object.entries(checkTypes)
-          .filter((c) => !overrideOnlyChecks.includes(c[0]))
+          .filter((c) => !overrideOnlyChecks.includes(c[0]) || trigger.requirementType === c[0])
           .map(([id, type]) => `<option value="${id}" title="${type.desc}">${id.replace(/([A-Z])/g, ' $1').trim()}</option>`).join();
         let typeSelectNode = $(`
           <select style="width: 100%">
@@ -20863,7 +20857,7 @@ declare global {
           </div>`);
 
         for (let resource of MarketManager.priorityList) {
-            if (resource === resources.Food && game.global.race['artifical']) {
+            if (resource === resources.Food && (game.global.race['artifical'] || game.global.race['fasting'])) {
                 continue;
             }
             let marketElement = $('#market-' + resource.id);
@@ -21010,8 +21004,51 @@ declare global {
             hc *= 1.5;
         }
         let max_bound = 20 * traitVal('slow_regen', 0, '+');
+        hc = Math.round(hc);
 
-        return traitVal('regenerative', 0, 1) + Math.round(hc) / max_bound;
+        // Guaranteed healing
+        let healed = traitVal('regenerative', 0, 1) + Math.floor(hc / max_bound);
+
+        // Probability to heal extra soldier
+        let leftover = hc % max_bound;
+        if (leftover > 0) {
+            let chances = leftover * max_bound;
+            let success = 0;
+            for (let i = 0; i < leftover; i++) {
+                for (let j = 0; j < max_bound; j++) {
+                    success += i > j;
+                }
+            }
+            healed += success / chances;
+        }
+
+        return healed;
+    }
+
+    // main.js -> food_consume_mod
+    function getFoodConsume() {
+        let fcm = 1;
+        fcm *= traitVal('gluttony', 0, "+");
+        fcm *= traitVal('high_metabolism', 0, "+");
+        fcm *= traitVal('sticky', 0, "-");
+        // TODO: pinguicula fathom
+        if (game.global.race['photosynth']){
+            switch(game.global.city.calendar.weather){
+                case 0:
+                    fcm *= game.global.city.calendar.temp === 0 ? 1 : traitVal('photosynth', 2, "-");
+                    break;
+                case 1:
+                    fcm *= traitVal('photosynth', 1, "-");
+                    break;
+                case 2:
+                    fcm *= traitVal('photosynth', 0, "-");
+                    break;
+            }
+        }
+        fcm *= traitVal('ravenous', 0, "+");
+        fcm *= game.global.city.calendar.season === 3 ? traitVal('hibernator', 0, "-") : 1;
+        fcm /= traitVal('high_pop', 0, 1);
+        return fcm;
     }
 
     // main.js -> Citizen Growth
@@ -21038,7 +21075,9 @@ declare global {
         lb += buildings.Hospital.count * (haveTech('reproduction', 2) ? 1 : 0);
         lb += game.global.genes['birth'] ?? 0;
         lb += game.global.race['promiscuous'] ?? 0;
-        lb *= (state.astroSign === 'sagittarius' ? 1.25 : 1);
+        lb += global.race['fasting'] ? (jobs.Meditator.count * traitVal('high_pop', 1, '=') * 0.15) : 0;
+        lb *= (buildings.Banquet.stateOnCount > 0 && buildings.Banquet.count >= 1) ? (1 + (game.global.city.banquet.strength ** 0.75) / 100) : 1;
+        lb *= (state.astroSign === 'libra' ? 1.25 : 1);
         lb *= traitVal("high_pop", 2, 1);
         lb *= (game.global.city.biome === 'taiga' ? 1.5 : 1);
         let base = resources.Population.currentQuantity * (game.global.city.ptrait.includes('toxic') ? 1.25 : 1);

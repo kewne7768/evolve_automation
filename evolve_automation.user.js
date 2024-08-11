@@ -809,6 +809,7 @@
             this.consumption = [];
             this.cost = {};
             this.overridePowered = undefined;
+            this.boughtThisTick = 0; // Game debug data needs an offset since last debug data, so we need to track this (or make lots of very costly debug data updates).
 
             this.is = normalizeProperties(flags) ?? {};
         }
@@ -931,7 +932,7 @@
             let adjustedCosts = poly.adjustCosts(this.definition);
             for (let resourceName in adjustedCosts) {
                 if (resources[resourceName]) {
-                    let resourceAmount = Number(adjustedCosts[resourceName]());
+                    let resourceAmount = Number(adjustedCosts[resourceName](this.boughtThisTick));
                     if (resourceAmount > 0) {
                         this.cost[resourceName] = resourceAmount;
                     }
@@ -950,7 +951,7 @@
 
         // This is a "safe" click. It will only click if the container is currently clickable.
         // ie. it won't bypass the interface and click the node if it isn't clickable in the UI.
-        click() {
+        click(silent = false) {
             if (!this.isClickable()) {
                 return false
             }
@@ -972,7 +973,7 @@
             }
 
             // Don't log evolution actions and gathering actions
-            if (game.global.race.species !== "protoplasm" && !logIgnore.includes(this.id)) {
+            if (game.global.race.species !== "protoplasm" && !silent && !logIgnore.includes(this.id)) {
                 if (this.gameMax < Number.MAX_SAFE_INTEGER && this.count + amountToBuild < this.gameMax) {
                     GameLog.logSuccess("multi_construction", poly.loc('build_success', [`${this.title} (${this.count + amountToBuild})`]), ['queue', 'building_queue']);
                 } else {
@@ -990,6 +991,7 @@
             // refresh is really only needed for first building as there are no buildings where building a second unlocks more stuff.
             if (settings.performanceHackAvoidDrawTech && this.definition.refresh && this.count > 0) {
                 this.definition.action();
+                this.boughtThisTick++;
                 return true;
             }
 
@@ -1007,6 +1009,8 @@
             if (this.is.prestige) {
                 state.goal = "GameOverMan";
             }
+
+            this.boughtThisTick++;
 
             return true;
         }
@@ -2726,6 +2730,8 @@
         [buildings.SpirePort, buildings.SpireBaseCamp],
     ]
 
+    var assemblyBuildings = [buildings.Assembly, buildings.RedAssembly, buildings.TauAssembly];
+
     var projects = {
         LaunchFacility: new Project("Launch Facility", "launch_facility"),
         SuperCollider: new Project("Supercollider", "lhc"),
@@ -3256,6 +3262,16 @@
           (building) => (building._tab === "city" || building._tab === "space" || building._tab === "starDock") && !(building instanceof ResourceAction),
           () => "Solar System building",
           () => settings.buildingWeightingSolar
+      ],[
+          () => settings.buildingSpecialAssembly && game.global.race['artifical'],
+          (building) => (assemblyBuildings.includes(building)),
+          () => "Using special multi-build mode",
+          () => 1 // Pop assembly is crucial to progress, let normal weightings work too in case resources are short
+      ],[
+          () => settings.buildingSpecialSwarmSat && (buildings.SunSwarmSatellite.cost.Money??0) <= settings.buildingSpecialSwarmSatMoneyCap,
+          (building) => building === buildings.SunSwarmSatellite,
+          () => "Using special multi-build mode",
+          () => 0
     ]];
 
     // Singleton manager objects
@@ -5797,6 +5813,7 @@
 
         updateBuildings() {
             for (let building of Object.values(buildings)){
+                building.boughtThisTick = 0;
                 building.updateResourceRequirements();
                 building.extraDescription = "";
             }
@@ -8965,7 +8982,10 @@ declare global {
             buildingsBestFreighter: false,
             buildingsUseMultiClick: false,
             buildingEnabledAll: true,
-            buildingStateAll: true
+            buildingStateAll: true,
+            buildingSpecialAssembly: true,
+            buildingSpecialSwarmSat: true,
+            buildingSpecialSwarmSatMoneyCap: 100,
         }
 
         for (let i = 0; i < BuildingManager.priorityList.length; i++) {
@@ -12536,6 +12556,52 @@ declare global {
         return buildCount;
     }
 
+    function autoBuildSpecial() {
+        // "Special" builders with non-standard logic go here. Special builders disregard weightings and ignore trigger resources on purpose.
+        // Each has its own setting, and will also respect each buildings autoBuild toggle.
+
+        // Special multi-build for population assembly buildings
+        if (settings.buildingSpecialAssembly && game.global.race['artifical'] && resources.Population.storageRatio < 1) {
+            let building = haveTech("focus_cure", 7) ? buildings.TauCloning : assemblyBuildings.find(b => b.isUnlocked());
+            if (building && building.autoBuildEnabled) {
+                let targetCount = Math.min(resources.Population.maxQuantity, building.autoMax);
+                // Never multi-build in Fasting or Gravity Well to reduce Meditator/Teamster fluctuation impact
+                if (game.global.race['fasting'] || game.global.race['gravity_well']) {
+                    targetCount = Math.min(resources.Population.currentQuantity + 1, targetCount);
+                }
+                for (let i = resources.Population.currentQuantity; i < targetCount; ++i) {
+                    if (!building.click(true)) break;
+                    building.updateResourceRequirements();
+                }
+            }
+        }
+
+        // Special multi-build for swarm sats
+        if (settings.buildingSpecialSwarmSat && buildings.SunSwarmSatellite.isUnlocked() && buildings.SunSwarmSatellite.autoBuildEnabled) {
+            let building = buildings.SunSwarmSatellite;
+            let maxCost = settings.buildingSpecialSwarmSatMoneyCap;
+
+            // Some overbuilding is good in case of sudden quantum drop, but too much overbuilding can cause lag (eg in micro when able to build 20k+ of them).
+            // To avoid lag and excess spending, limit overbuilding to 1000 above support and only do it when free.
+            if (buildings.SunSwarmSatellite.count >= resources.Sun_Support.maxQuantity) {
+                maxCost = 0;
+            }
+            const maxCount = (maxCost > 0 ? 0 : 1000) + (resources.Sun_Support.maxQuantity - building.count);
+
+            for (let i = 0; i < maxCount; ++i) {
+                if ((building.cost.Money ?? 0) > maxCost || !building.click(true)) {
+                    break;
+                }
+                console.info("Swarm Sat cost %d %o", i, building.cost);
+                building.updateResourceRequirements();
+            }
+
+            if (building.boughtThisTick && !logIgnore.includes(building.id)) {
+                GameLog.logSuccess("multi_construction", poly.loc('build_success', [`${this.title} (${building.boughtThisTick})`]), ['queue', 'building_queue']);
+            }
+        }
+    }
+
     function getTechConflict(tech) {
         let itemId = tech._vueBinding;
 
@@ -15472,6 +15538,7 @@ declare global {
             }
             if (settings.autoBuild || settings.autoARPA) {
                 autoBuild(); // Called after autoStorage to compensate fluctuations of quantum(caused by previous tick's adjustments) levels before weightings
+                autoBuildSpecial();
             }
         }
         if (settings.autoJobs) {
@@ -15687,6 +15754,8 @@ declare global {
         state.forcedUpdate = true;
         game.updateDebugData();
         state.forcedUpdate = false;
+        // Needs to stay in sync with debug data updates.
+        Object.values(buildings).forEach(b => b.boughtThisTick = 0);
     }
 
     function addScriptStyle() {
@@ -19746,6 +19815,11 @@ declare global {
                 updateSettingsFromState();
             },
         });
+
+        addSettingsHeader2(currentNode, "Smart Multi-build Construction");
+        addSettingsToggle(currentNode, "buildingSpecialAssembly", "Smart population assembly", "For population assembly: Disables the default autoBuild weighting system, allows multi-build and treats assembly as absolute priority. Build limit and build toggle will still be respected. Multi-build disabled in Gravity Well and Fasting, but will still ignore weighting.");
+        addSettingsToggle(currentNode, "buildingSpecialSwarmSat", "Smart Swarm Satellite construction", "For Swarm Satellites: While below the money cap, disables the default autoBuild weighting system, allows multi-build up to your current support cap. Overbuilds up to 1000 satellites if they are free. Autobuild toggle is still respected.");
+        addSettingsNumber(currentNode, "buildingSpecialSwarmSatMoneyCap", "Smart Swarm Satellite money cap", "For Swarm Satellites: Disables smart buying as soon as the next satellite's money cost exceeds this amount. Regular build behavior will be active while above this money cost. No effect if Smart Swarm Satellites is disabled.");
 
         document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;
     }

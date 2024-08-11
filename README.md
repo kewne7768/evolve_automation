@@ -18,4 +18,4 @@ Summary of changes:
 * Prestige logging database. This can be enabled under Logging Settings. Unfortunately, at the moment, configuration for this feature is almost nonexistent aside from on/off. There is a builtin hard-coded graph available set up to accompany T4 farm runs with [this snippet](https://github.com/kewne7768/snippet-samples/blob/main/Prestige%20Log%20Milestones.js) installed. You can also export your run database to CSV or JSON and process it using your favorite data visualization tools.
 * Misc fixes I'd like to send back but haven't had the time to properly go and test
 
-You can find the official version by Volch [here](https://gist.github.com/Vollch/b1a5eec305558a48b7f4575d317d7dd1).
+You can find the official version by Volch [here](https://github.com/Vollch/Evolve-Automation).

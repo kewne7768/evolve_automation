@@ -15796,6 +15796,10 @@ declare global {
                 margin-bottom: 10px;
             }
 
+            #script_triggerContent table td {
+                padding: 8px 6px;
+            }
+
             /* Open script options button */
             .s-options-button {
                 padding-right: 2px;

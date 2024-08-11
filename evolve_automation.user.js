@@ -12592,12 +12592,11 @@ declare global {
                 if ((building.cost.Money ?? 0) > maxCost || !building.click(true)) {
                     break;
                 }
-                console.info("Swarm Sat cost %d %o", i, building.cost);
                 building.updateResourceRequirements();
             }
 
             if (building.boughtThisTick && !logIgnore.includes(building.id)) {
-                GameLog.logSuccess("multi_construction", poly.loc('build_success', [`${this.title} (${building.boughtThisTick})`]), ['queue', 'building_queue']);
+                GameLog.logSuccess("multi_construction", poly.loc('build_success', [`${building.title} (${building.boughtThisTick})`]), ['queue', 'building_queue']);
             }
         }
     }

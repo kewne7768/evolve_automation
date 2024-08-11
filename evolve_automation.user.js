@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.128
+// @version      3.3.1.129
 // @description  try to take over the world!
 // @downloadURL  https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.user.js
 // @updateURL    https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.meta.js
@@ -7631,7 +7631,6 @@ declare global {
         _allFn: null,
         _eventProp: {Shift: "shiftKey", Control: "ctrlKey", Alt: "altKey", Meta: "metaKey"},
         _state: {x100: undefined, x25: undefined, x10: undefined},
-        _userState: {x100: false, x25: false, x10: false},
         _mode: "none",
 
         init() {
@@ -7653,31 +7652,6 @@ declare global {
                 this._unsetFn = unset;
                 this._allFn = all;
             }
-
-            // Try to preserve real user state as best as possible by listening for events ourselves.
-            // Our fake events will either not be seen at all (if jQuery) or will not set isTrusted due to being fake (if fallback mode).
-            ["keyup", "keydown"].forEach(etype => win.document.addEventListener(etype, (e) => {
-                if (e.isTrusted) {
-                    let keyCode = e.key || e.keyCode;
-                    let state = this._mapKeyToState(keyCode);
-                    if (state) this._userState[state] = e.type === "keydown" ? true : false;
-                }
-            }));
-            win.document.addEventListener("mousemove", (e) => {
-                if (e.isTrusted) {
-                    Object.entries(this._eventProp).forEach(([keyCode, eventKey]) => {
-                        let state = this._mapKeyToState(keyCode);
-                        if (state) this._userState[state] = e[eventKey];
-                    });
-                }
-            });
-        },
-
-        _mapKeyToState(key) {
-            for (let t of ["x100", "x25", "x10"]) {
-                if (key === game.global.settings.keyMap[t]) return t;
-            }
-            return null;
         },
 
         reset() {
@@ -7701,7 +7675,9 @@ declare global {
         },
 
         finish() {
-            this.set(this._userState.x100, this._userState.x25, this._userState.x10);
+            if (this._state.x100 || this._state.x25 || this._state.x10) {
+                this.set(false, false, false);
+            }
         },
 
         setKey(key, pressed) {
@@ -21097,6 +21073,10 @@ declare global {
         if (getGovernor() === 'sports') {
             hc *= 1.5;
         }
+        if (buildings.Banquet.stateOnCount > 0 && buildings.Banquet.count >= 2){
+            hc *= 1 + (game.global.city.banquet.strength ** 0.65) / 100;
+        }
+        //TODO: troll fathom
         let max_bound = 20 * traitVal('slow_regen', 0, '+');
         hc = Math.round(hc);
 

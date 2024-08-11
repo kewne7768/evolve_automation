@@ -1153,7 +1153,7 @@
                 return 0;
             }
 
-            return this.instance.count - this.instance.on;
+            return (this === buildings.Banquet ? Math.min(this.instance.count, 1) : this.instance.count) - this.instance.on;
         }
 
         tryAdjustState(adjustCount) {

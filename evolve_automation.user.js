@@ -69,7 +69,7 @@
     var checkActions = false;
 
     // Displayed in error handler. Please change this if you publish a forked version of the script.
-    const SCRIPT_VERSION_EXTRA = "";
+    const SCRIPT_VERSION_EXTRA = "[Kewne]";
 
     const CONSUMPTION_BALANCE_MIN = 60; // Seconds of used resources to keep
     const CONSUMPTION_BALANCE_TARGET = 120; // Seconds of used resources to try producing
@@ -6076,6 +6076,7 @@
                         this._snippetUiIndicatorRedraw = true;
                         let msg = `Snippet [${snip.title}] error: ${e}. See the browser console for more information.`;
                         GameLog.logDanger("special", msg, ['events', 'major_events']);
+                        displayScriptWarningNode("Snippet Error", `Error in snippet "${snip.title}". Snippet is temporarily disabled.\n${e}`, e?.stack);
                     }
                 }
             }

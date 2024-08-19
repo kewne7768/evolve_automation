@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.129
+// @version      3.3.1.130
 // @description  try to take over the world!
 // @downloadURL  https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.user.js
 // @updateURL    https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.meta.js
@@ -2116,7 +2116,7 @@
     const evolutionSettingsToStore = ["userEvolutionTarget", "prestigeType", ...challenges.map(c => "challenge_" + c[0].id)];
     const logIgnore = ["food", "lumber", "stone", "chrysotile", "slaughter", "s_alter", "slave_market", "horseshoe", "assembly", "cloning_facility"];
     const galaxyRegions = ["gxy_stargate", "gxy_gateway", "gxy_gorddon", "gxy_alien1", "gxy_alien2", "gxy_chthonian"];
-    const settingsSections = ["toggle", "general", "prestige", "evolution", "research", "market", "storage", "production", "war", "hell", "fleet", "job", "building", "project", "government", "logging", "trait", "weighting", "ejector", "planet", "mech", "magic"];
+    const settingsSections = ["toggle", "general", "prestige", "evolution", "research", "market", "storage", "production", "war", "hell", "fleet", "job", "building", "project", "government", "logging", "trait", "weighting", "ejector", "planet", "mech", "magic", "trigger"];
     const mutationCostMultipliers = {sludge: {gain: 2, purge: 10}, custom: {gain: 10, purge: 10}};
     const specialRaceTraits = {beast_of_burden: "reindeer", photosynth: "plant"};
     const conflictingTraits = [["dumb", "smart"]];
@@ -12132,6 +12132,7 @@ declare global {
 
     function autoGenetics() {
         let genetics = game.global.tech.genetics;
+        let mutations = game.global.race.mutation;
         if (!genetics) {
             return; // Genetics not researched yet
         }
@@ -12144,7 +12145,10 @@ declare global {
 
         if ((settings.geneticsSequence === "enabled" && !seq.on) ||
             (settings.geneticsSequence === "disabled" && seq.on) ||
-            (settings.geneticsSequence === "decode" && seq.on && genetics > 1)) {
+            (settings.geneticsSequence === "decode" &&
+                ((seq.on && mutations >= 1) || 
+                (!seq.on && mutations < 1))
+            )) {
             geneticsVue.toggle();
         }
 
@@ -12890,7 +12894,7 @@ declare global {
                         //let maxLanders = getHealingRate() < woundCap ? Math.floor((getHealingRate() + protectedSoldiers) / 1.5) : Number.MAX_SAFE_INTEGER;
                         let reservedSoldiers = settings.autoFleet ? FleetManagerOuter.nextShipDesiredCrew : 0;
                         let reservedMaxSquads = Math.floor((WarManager.maxSoldiers - reservedSoldiers) / (3 * traitVal('high_pop', 0, 1)));
-                        let dispatchSoldiers = WarManager.currentSoldiers - Math.min(0, WarManager.wounded - Math.floor(getHealingRate()));
+                        let dispatchSoldiers = WarManager.currentSoldiers - Math.max(0, WarManager.wounded - Math.floor(getHealingRate()));
                         let healthySquads = Math.floor(Math.max(0, dispatchSoldiers) / (3 * traitVal('high_pop', 0, 1)));
                         maxStateOn = Math.min(maxStateOn, reservedMaxSquads, healthySquads /*, maxLanders*/ );
                     }
@@ -16588,6 +16592,7 @@ declare global {
                       o === "tknow" ? (state.knowledgeRequiredByTechs) : o,
     }
 
+    // TODO: Add TabUnlocked, with showCity, showTau, showMarket, etc.
     const checkTypes = {
         String: { fn: (v) => v, arg: "string", def: "none", desc: "Returns string" },
         Number: { fn: (v) => v, arg: "number", def: 0, desc: "Returns number" },
@@ -18448,13 +18453,25 @@ declare global {
           </table>`);
 
         let tableBodyNode = $(`#script_${secondaryPrefix}fleetTableBody`);
-        let newTableBodyText = "";
 
         let priorityRegions = galaxyRegions.slice().sort((a, b) => settingsRaw["fleet_pr_" + a] - settingsRaw["fleet_pr_" + b]);
         for (let i = 0; i < priorityRegions.length; i++) {
-            newTableBodyText += `<tr value="${priorityRegions[i]}" class="script-draggable"><td id="script_${secondaryPrefix}fleet_${priorityRegions[i]}" style="width:95%"><td style="width:5%"><span class="script-lastcolumn"></span></td></tr>`;
+            const settingName = `fleet_pr_${priorityRegions[i]}`;
+
+            const rowNode = $(`
+              <tr value="${priorityRegions[i]}" class="script-draggable script_bg_${settingName}">
+                <td id="script_${secondaryPrefix}fleet_${priorityRegions[i]}" style="width:95%"></td>
+                <td style="width:5%">
+                  <span class="script-lastcolumn"></span>
+                </td>
+              </tr>`);
+
+            rowNode
+                .toggleClass('inactive-row', Boolean(settingsRaw.overrides[settingName]))
+                .on('click', {label: `Andromeda region priority (${settingName})`, name: settingName, type: "number"}, openOverrideModal);
+
+            tableBodyNode.append(rowNode);
         }
-        tableBodyNode.append($(newTableBodyText));
 
         // Build all other productions settings rows
         for (let i = 0; i < galaxyRegions.length; i++) {

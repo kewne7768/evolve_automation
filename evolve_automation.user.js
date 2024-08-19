@@ -9245,7 +9245,7 @@ declare global {
             fleetMaxCover: true,
             fleetEmbassyKnowledge: 6000000,
             fleetAlienGiftKnowledge: 6500000,
-            fleetAlien2Knowledge: 8500000,
+            fleetAlien2Knowledge: 8000000,
             fleetAlien2Loses: "none",
             fleetChthonianLoses: "low",
 

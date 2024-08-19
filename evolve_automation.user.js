@@ -12889,9 +12889,10 @@ declare global {
                         //let woundCap = Math.ceil((game.global.space.fob.enemy + (game.global.tech.outer >= 4 ? 75 : 62.5)) / 5) - protectedSoldiers;
                         //let maxLanders = getHealingRate() < woundCap ? Math.floor((getHealingRate() + protectedSoldiers) / 1.5) : Number.MAX_SAFE_INTEGER;
                         let reservedSoldiers = settings.autoFleet ? FleetManagerOuter.nextShipDesiredCrew : 0;
+                        let reservedMaxSquads = Math.floor((WarManager.maxSoldiers - reservedSoldiers) / (3 * traitVal('high_pop', 0, 1)));
                         let dispatchSoldiers = WarManager.currentSoldiers - Math.min(0, WarManager.wounded - Math.floor(getHealingRate()));
-                        let healthySquads = Math.floor(Math.max(0, dispatchSoldiers - reservedSoldiers) / (3 * traitVal('high_pop', 0, 1)));
-                        maxStateOn = Math.min(maxStateOn, healthySquads /*, maxLanders*/ );
+                        let healthySquads = Math.floor(Math.max(0, dispatchSoldiers) / (3 * traitVal('high_pop', 0, 1)));
+                        maxStateOn = Math.min(maxStateOn, reservedMaxSquads, healthySquads /*, maxLanders*/ );
                     }
                 }
                 // Do not enable Ascension Machine while we're waiting for pillar
@@ -13905,7 +13906,7 @@ declare global {
             // This must ONLY be set here, and only needs to be set if the crew left-over isn't enough.
             // We don't want to take crew from FOB landers until the very moment it's needed.
             // It's set to 0 earlier in this function, so in all other cases it will be set to 0.
-            m.nextShipDesiredCrew = minCrew;
+            m.nextShipDesiredCrew = m.ClassCrew[newShip.class];
             return;
         }
 

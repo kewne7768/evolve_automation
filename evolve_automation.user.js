@@ -13135,6 +13135,11 @@ declare global {
                             maxStateOn = 0;
                             break;
                         }
+                        // Banquet hall, if unlocked+enabled, will handle low food case automatically by resetting
+                        // This can lead to disabling spaceports and then biodomes if not checked
+                        if (buildings.Banquet.stateOnCount) {
+                            continue;
+                        }
                         // Wendigo doesn't store food. Let's assume it's always available.
                         if (resourceType.resource.storageRatio > 0.05 || isHungryRace()) {
                             continue;

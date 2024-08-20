@@ -16167,10 +16167,8 @@ declare global {
     function checkIgnoredError(e) {
         if (typeof e !== "string") e = String(e);
         let ignoreRegexes = [
-            // v1.3.13b
-            // https://github.com/pmotschmann/Evolve/pull/1173
-            /.*ReferenceError.*defineGovernor.*/,
-            /.*ReferenceError.*drawResourceTab.*/,
+            // Currently no known game errors. Example regex:
+            // /.*ReferenceError.*defineGovernor.*/,
         ];
 
         if (ignoreRegexes.find(regex => regex.test(e))) {

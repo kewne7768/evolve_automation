@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.130.1
+// @version      3.3.1.131
 // @description  try to take over the world!
 // @downloadURL  https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.user.js
 // @updateURL    https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.meta.js
@@ -2365,7 +2365,7 @@
         Mill: new Action("Windmill", "city", "mill", "", {smart: true}),
         Windmill: new Action("Windmill (Evil)", "city", "windmill", ""),
         Silo: new Action("Grain Silo", "city", "silo", ""),
-        Assembly: new ResourceAction("Assembly", "city", "assembly", "", "Population", {housing: true}),
+        Assembly: new ResourceAction("Assembly", "city", "assembly", "", "Population", {housing: true, important: true}),
         Barracks: new Action("Barracks", "city", "garrison", "", {garrison: true}),
         Hospital: new Action("Hospital", "city", "hospital", ""),
         BootCamp: new Action("Boot Camp", "city", "boot_camp", ""),
@@ -2426,7 +2426,7 @@
         RedTerraformer: new Action("Red Terraformer (Orbit Decay)", "space", "terraformer", "spc_red", {multiSegmented: true}),
         RedAtmoTerraformer: new Action("Red Terraformer (Orbit Decay, Complete)", "space", "atmo_terraformer", "spc_red"),
         RedTerraform: new Action("Red Terraform (Orbit Decay)", "space", "terraform", "spc_red", {prestige: true}),
-        RedAssembly: new ResourceAction("Red Assembly (Cataclysm)", "space", "assembly", "spc_red", "Population", {housing: true}),
+        RedAssembly: new ResourceAction("Red Assembly (Cataclysm)", "space", "assembly", "spc_red", "Population", {housing: true, important: true}),
         RedLivingQuarters: new Action("Red Living Quarters", "space", "living_quarters", "spc_red", {housing: true}),
         RedPylon: new Action("Red Pylon (Cataclysm)", "space", "pylon", "spc_red"),
         RedVrCenter: new Action("Red VR Center", "space", "vr_center", "spc_red"),
@@ -2531,7 +2531,7 @@
         TauPylon: new Action("Tau Pylon", "tauceti", "pylon", "tau_home"),
         TauCloning: new ResourceAction("Tau Cloning", "tauceti", "cloning_facility", "tau_home", "Population", {housing: true}),
         TauForgeHorseshoe: new ResourceAction("Tau Horseshoe", "tauceti", "horseshoe", "tau_home", "Horseshoe", {housing: true, garrison: true}),
-        TauAssembly: new ResourceAction("Tau Assembly", "tauceti", "assembly", "tau_home", "Population", {housing: true}),
+        TauAssembly: new ResourceAction("Tau Assembly", "tauceti", "assembly", "tau_home", "Population", {housing: true, important: true}),
         TauNaniteFactory: new CityAction("Tau Nanite Factory", "tauceti", "nanite_factory", "tau_home"),
         TauFarm: new Action("Tau High-Tech Farm", "tauceti", "tau_farm", "tau_home"),
         TauMiningPit: new Action("Tau Mining Pit", "tauceti", "mining_pit", "tau_home", {smart: true}),
@@ -9117,6 +9117,7 @@ declare global {
             productionSmelting: "required",
             productionSmeltingMaxIronRatio: 0.2,
             productionSmeltingIridium: 0.5,
+            productionFactoryWeighting: "none",
             productionFactoryMinIngredients: 0.01,
             productionFactoryFocusMaterials: false,
             replicatorAssignGovernorTask: true
@@ -9608,6 +9609,10 @@ declare global {
                 buildScriptSettings();
             }
         }
+    }
+
+    function findRequiredResourceWeight(resource) {
+        return state.unlockedBuildings.find(building => building.cost[resource.id] > resource.currentQuantity)?.weighting;
     }
 
     function autoEvolution() {
@@ -10488,7 +10493,7 @@ declare global {
             }
 
             if (settings.productionFoundryWeighting === "buildings" && state.unlockedBuildings.length > 0) {
-                let scaledWeightings = Object.fromEntries(availableJobs.map(job => [job.id, (state.unlockedBuildings.find(building => building.cost[job.resource.id] > job.resource.currentQuantity)?.weighting ?? 0) * job.resource.craftWeighting]));
+                let scaledWeightings = Object.fromEntries(availableJobs.map(job => [job.id, (findRequiredResourceWeight(job.resource) ?? 0) * job.resource.craftWeighting]));
                 availableJobs.sort((a, b) => (a.resource.currentQuantity / scaledWeightings[a.id]) - (b.resource.currentQuantity / scaledWeightings[b.id]));
             } else {
                 availableJobs.sort((a, b) => (a.resource.currentQuantity / a.resource.craftWeighting) - (b.resource.currentQuantity / b.resource.craftWeighting));
@@ -11440,19 +11445,32 @@ declare global {
             priorityList[0].push(...priorityGroups["-1"]);
         }
 
+        if (settings.productionFactoryWeighting === "demanded") {
+            let usefulProducts = allProducts.filter(production => production.resource.currentQuantity < production.resource.storageRequired);
+            if (usefulProducts.length > 0) {
+                allProducts = usefulProducts;
+            }
+        }
+
+        let scaledWeights = allProducts.map(production => [production.resource.id, production.weighting]);
+        if (settings.productionFactoryWeighting === "buildings" && state.unlockedBuildings.length > 0) {
+            scaledWeights = scaledWeights.map(([resourceId, weight]) => [resourceId, weight * (findRequiredResourceWeight(resourceId) ?? 100)]);
+        }
+        scaledWeights = Object.fromEntries(scaledWeights);
+
         // Calculate amount of factories per product
         let remainingFactories = FactoryManager.maxOperating();
         for (let i = 0; i < priorityList.length && remainingFactories > 0; i++) {
-            let products = priorityList[i].sort((a, b) => a.weighting - b.weighting);
+            let products = priorityList[i].sort((a, b) => scaledWeights[a.resource.id] - scaledWeights[b.resource.id]);
             while (remainingFactories > 0) {
                 let factoriesToDistribute = remainingFactories;
-                let totalPriorityWeight = products.reduce((sum, production) => sum + production.weighting, 0);
+                let totalPriorityWeight = products.reduce((sum, production) => sum + scaledWeights[production.resource.id], 0);
 
                 for (let j = products.length - 1; j >= 0 && remainingFactories > 0; j--) {
                     let production = products[j];
                     state.tooltips["iFactory" + production.id] = ``;
 
-                    let calculatedRequiredFactories = Math.min(remainingFactories, Math.max(1, Math.floor(factoriesToDistribute / totalPriorityWeight * production.weighting)));
+                    let calculatedRequiredFactories = Math.min(remainingFactories, Math.max(1, Math.floor(factoriesToDistribute / totalPriorityWeight * scaledWeights[production.resource.id])));
                     let actualRequiredFactories = calculatedRequiredFactories;
 
                     if (!production.resource.isUseful()) {
@@ -12475,7 +12493,7 @@ declare global {
 
             // Check queue and trigger conflicts
             let conflict = getCostConflict(building);
-            if (conflict) {
+            if (conflict && !building.is.important) {
                 building.extraDescription += `Conflicts with ${conflict.actionList.map(action => {return `<span class="has-text-info">${action}</span>`;}).join(', ')} for ${conflict.resList.map(res => {return `<span class="has-text-info">${res}</span>`;}).join(', ')} (${conflict.obj.cause})<br>`;
                 continue;
             }
@@ -15538,9 +15556,6 @@ declare global {
         if (settings.autoGalaxyMarket) {
             autoGalaxyMarket();
         }
-        if (settings.autoFactory) {
-            autoFactory();
-        }
         if (settings.autoMiningDroid) {
             autoMiningDroid();
         }
@@ -15581,6 +15596,9 @@ declare global {
                 autoBuild(); // Called after autoStorage to compensate fluctuations of quantum(caused by previous tick's adjustments) levels before weightings
                 autoBuildSpecial();
             }
+        }
+        if (settings.autoFactory) {
+            autoFactory();
         }
         if (settings.autoJobs) {
             autoJobs();
@@ -19399,6 +19417,10 @@ declare global {
 
     function updateProductionTableFactory(currentNode) {
         addStandardHeading(currentNode, "Factory");
+        let weightingOptions = [{val: "none", label: "None", hint: "Use configured weightings with no additional adjustments, resources with x2 weighting will be produced two times more intense than with x1, etc."},
+                                {val: "demanded", label: "Prioritize demanded", hint: "Ignore resources once stored amount surpass cost of most expensive building, until all missing resources will be crafted. After that works as with 'none' adjustments."},
+                                {val: "buildings", label: "Buildings weightings", hint: "Uses weightings of buildings which are waiting for resources, as multipliers to production weighting. This option requires autoBuild."}];
+        addSettingsSelect(currentNode, "productionFactoryWeighting", "Weightings adjustments", "Configures how exactly the resources will be weighted against each other", weightingOptions);
         addSettingsNumber(currentNode, "productionFactoryMinIngredients", "Minimum materials to preserve", "Factory will craft resources only when all required materials above given ratio");
 
         currentNode.append(`

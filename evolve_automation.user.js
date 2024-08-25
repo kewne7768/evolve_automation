@@ -9118,7 +9118,7 @@ declare global {
             productionSmeltingMaxIronRatio: 0.2,
             productionSmeltingIridium: 0.5,
             productionFactoryWeighting: "none",
-            productionFactoryMinIngredients: 0.01,
+            productionFactoryMinIngredients: 0,
             productionFactoryFocusMaterials: false,
             replicatorAssignGovernorTask: true
         }

@@ -15,5 +15,5 @@
 // @grant        none
 // @require      https://code.jquery.com/jquery-3.7.1.min.js
 // @require      https://code.jquery.com/ui/1.12.1/jquery-ui.min.js
-// @require      https://kewne7768.github.io/monaco-export/monaco-export.js
+// @require      https://kewne7768.github.io/monaco-export/monaco-export.js?0.51.0
 // ==/UserScript==

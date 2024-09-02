@@ -16188,8 +16188,15 @@ declare global {
     function checkIgnoredError(e) {
         if (typeof e !== "string") e = String(e);
         let ignoreRegexes = [
-            // Currently no known game errors. Example regex:
+            // List only known game errors here, try to include some kind of reference. Ideally this list is always empty.
+            // Example regex:
             // /.*ReferenceError.*defineGovernor.*/,
+
+            // Unknown game error with stacktrace not coming from the game.
+            // TODO: Find and submit fix for exact source of error
+            // Presumably a vBind for a city/action combo that doesn't exist?
+            // https://discord.com/channels/586926974585274373/605191634300174337/1280174770369069190
+            /.*TypeError.*'on'/,
         ];
 
         if (ignoreRegexes.find(regex => regex.test(e))) {

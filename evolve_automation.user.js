@@ -15832,7 +15832,7 @@ declare global {
             gruvboxLight: {background: "#fbf1c7", alt: "#f9f5d7", hover: "#e8e4c6", border: "#3c3836", primary: "#3c3836", hasTextWarning: '#b57614'},
             gruvboxDark: {background: "#282828", alt: "#1d2021", hover: "#0c0f10", border: "#3c3836", primary: "#ebdbb2", hasTextWarning: '#fabd2f'},
             orangeSoda: {background: "#131516", alt: "#292929", hover: "#181818", border: "#313638", primary: "#EBDBB2", hasTextWarning: '#F06543'},
-            dracula: {background: "#282a36", alt: "#1d2021", hover: "#C0F10", border: "#44475a", primary: "#f8f8f2", hasTextWarning: '#f1fa8c'},
+            dracula: {background: "#282a36", alt: "#1d2021", hover: "#0c0f10", border: "#44475a", primary: "#f8f8f2", hasTextWarning: '#f1fa8c'},
         };
         let styles = "";
         // Colors for different themes

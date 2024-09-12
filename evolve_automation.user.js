@@ -11290,13 +11290,24 @@ declare global {
         // We want to work out the maximum steel smelters that we can have based on our resource consumption
         let steelSmeltingConsumption = m.Productions.Steel.cost;
         let steelConsumptionMissing = false;
+        const steelDemanded = resources.Steel.isDemanded();
         for (let productionCost of steelSmeltingConsumption) {
             let resource = productionCost.resource;
-            // Allow using all resources for Steel until 60s of consumption left, unless demanded.
-            if (resource.currentQuantity < ((smelterSteelCount * productionCost.quantity) * CONSUMPTION_BALANCE_MIN + productionCost.minRateOfChange) || resource.isDemanded()) {
-                let remainingRateOfChange = resource.rateOfChange + (smelterSteelCount * productionCost.quantity) - productionCost.minRateOfChange;
+            // Cap based on Iron/Coal if needed. It is needed when one of the following is true:
+            // * There is less than 60s of consumption in storage (low storage mode)
+            // * OR Iron/Coal is demanded, but Steel is not demanded
+            // When needed, we look at 5% of the total raw income or 100% of the remaining rate of change, whichever is higher.
+            // The 5% total income check solves two specific cases:
+            // * The user is spending all of their coal on Nano Tubes (many hundreds, not enough for our income to make a dent) and 120s balancing takes effect to demand more Coal
+            // * Building with high Iron or Coal cost is demanded
+            // It might flicker for Iron but oh well.
+            const costDemanded = resource.isDemanded();
+            const haveEnoughStorage = resource.currentQuantity >= ((smelterSteelCount * productionCost.quantity) * CONSUMPTION_BALANCE_MIN + productionCost.minRateOfChange)
+            if (!haveEnoughStorage || (!steelDemanded && costDemanded)) {
+                const allowedIncome = resource.income * 0.05;
+                const remainingRateOfChange = resource.rateOfChange + (smelterSteelCount * productionCost.quantity) - productionCost.minRateOfChange;
 
-                let affordableAmount = Math.max(0, Math.floor(remainingRateOfChange / productionCost.quantity));
+                let affordableAmount = Math.max(0, Math.floor(Math.max(remainingRateOfChange, allowedIncome) / productionCost.quantity));
                 if (affordableAmount < maxAllowedSteel) {
                     state.tooltips["smelterMatssteel"] = `Too low ${resource.name} income<br>`;
                     steelConsumptionMissing = true;
@@ -11410,8 +11421,6 @@ declare global {
         // Compare to actual smelters.
         smeltAdjust.Iron = newWantedIronCount - smelterIronCount;
         smeltAdjust.Steel = newWantedSteelCount - smelterSteelCount;
-
-        //console.debug("smeltAdjust: %o / realSteelRatio: %f", smeltAdjust, realSteelRatio);
 
         Object.entries(smeltAdjust).forEach(([id, delta]) => delta < 0 && m.decreaseSmelting(id, delta * -1));
         Object.entries(smeltAdjust).forEach(([id, delta]) => delta > 0 && m.increaseSmelting(id, delta));

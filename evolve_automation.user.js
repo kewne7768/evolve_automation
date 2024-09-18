@@ -10170,7 +10170,7 @@
             let maxFueledForConsumption = remainingPlants;
             if (!resources.Graphene.isUseful()) {
                 maxFueledForConsumption = 0;
-            } else if (resource.storageRatio < 0.8) {
+            } else if (resource.currentQuantity < ((maxFueledForConsumption * fuel.cost.quantity * CONSUMPTION_BALANCE_MIN) + fuel.cost.minRateOfChange)) {
                 let rateOfChange = resource.rateOfChange + fuel.cost.quantity * currentFuelCount - fuel.cost.minRateOfChange;
 
                 let affordableAmount = Math.floor(rateOfChange / fuel.cost.quantity);

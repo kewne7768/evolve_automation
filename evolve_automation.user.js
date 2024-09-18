@@ -14796,6 +14796,7 @@ declare global {
           + (game.global.tech.replicator ? 1 : 0) // Matter Replicator unlocked
           + (game.global.tauceti.tau_factory?.count > 0 ? 1 : 0) // Factory built in lone survivor
           + (game.global.space.g_factory?.count > 0 ? 1 : 0) // Graphene plant built in lone survivor
+          + ((game.global.tech?.plague??0) >= 5 ? 1 : 0) // Belt mining -> plague 5 given -> access to Outer Tau Survey tech in lone survivor
           + (game.global.tech.alien_data >= 6 ? 1 : 0) // Alien Space Station decrypted (only required in lone survivor)
           + (game.global.tauceti.mining_ship?.count > 0 ? 1 : 0) // Extractor ship built
           + (game.global.tech.psychicthrall ?? 0) // Psychic powers

@@ -7708,13 +7708,13 @@ declare global {
             let uniq = ['x100', 'x25', 'x10'].every(key => keys.indexOf(map[key]) === keys.lastIndexOf(map[key]));
 
             if (!game.global.settings.mKeys) {
-                this._mode = "none";
-            } else if (keys.length !== uniq.length) {
-                this._mode = "unset";
+                this._mode = "none"; // Can't use multipliers
+            } else if (!uniq) {
+                this._mode = "unset"; // Can't safely use multipliers but need to unset user keys
             } else if (this._allFn && ['x100', 'x25', 'x10'].every(key => ['Shift', 'Control', 'Alt', 'Meta'].includes(game.global.settings.keyMap[key]))) {
-                this._mode = "all";
+                this._mode = "all"; // Send single event with modifier keys only
             } else {
-                this._mode = "each";
+                this._mode = "each"; // Need to send 1 event per key
             }
         },
 

@@ -7651,6 +7651,7 @@ declare global {
         _state: {x100: undefined, x25: undefined, x10: undefined},
         _userState: {x100: false, x25: false, x10: false},
         _mode: "none",
+        _eventMode: "none", // TODO: This is for later display in some kind of debug info screen
 
         init() {
             let events = win.$._data(win.document).events;
@@ -7662,14 +7663,17 @@ declare global {
                 this._setFn = (e) => document.dispatchEvent(new KeyboardEvent("keydown", e));
                 this._unsetFn = (e) => document.dispatchEvent(new KeyboardEvent("keyup", e));
                 this._allFn = null;
+                this._eventMode = "dispatchEvent";
             } else if (needSandboxBypass) { // FF fix
                 this._setFn = (e) => set(cloneInto(e, unsafeWindow));
                 this._unsetFn = (e) => unset(cloneInto(e, unsafeWindow));
                 this._allFn = (e) => all(cloneInto(e, unsafeWindow));
+                this._eventMode = "jq-sandbox";
             } else {
                 this._setFn = set;
                 this._unsetFn = unset;
                 this._allFn = all;
+                this._eventMode = "jq";
             }
 
             // Try to preserve real user state as best as possible by listening for events ourselves.

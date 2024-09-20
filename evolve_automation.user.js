@@ -7719,7 +7719,9 @@ declare global {
         },
 
         finish() {
-            this.set(this._userState.x100, this._userState.x25, this._userState.x10);
+            if (["all", "each"].includes(this._mode)) {
+                this.set(this._userState.x100, this._userState.x25, this._userState.x10);
+            }
         },
 
         setKey(key, pressed) {

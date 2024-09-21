@@ -15772,11 +15772,6 @@ declare global {
             win = unsafeWindow;
         } else {
             win = window;
-            // Chrome overrides original JQuery with one required by script, we need to restore it to get $._data with events handlers
-            // I'd get rid of this JQuery copy altogether, that's a right way to do it. No duplicate - no conflicts... But that breaks that damn FF.
-            if (!win.$._data(win.document).events?.['keydown']) {
-                $.noConflict();
-            }
         }
         game = win.evolve;
 
@@ -21745,6 +21740,19 @@ declare global {
         messageQueue: (msg, color, dnr, tags) => game.messageQueue(msg, color, dnr, cloneInto(tags, unsafeWindow)),
         shipCosts: (bp) => game.shipCosts(cloneInto(bp, unsafeWindow)),
     };
+
+    // Try to remove our jQuery $ copy from the global stack, but only if all of these are true:
+    // * we don't have to use sandbox mode (have window + no unsafeWindow or === to window). noConflict assumes it can write to window directly.
+    // * the game's keydown event isn't registered in the global copy - if it is, it's too late to remove or our copy never got loaded in
+    // * there is still a global $ after removal
+    // This should be the case most of the time. We still keep the local $ reference to it.
+    // This isn't required but helps reduce problems with other scripts bringing their own jQuery copy.
+    if (window && (!unsafeWindow || unsafeWindow === window) && !window.$._data(window.document).events?.['keydown']) {
+        let tmp = window.$.noConflict();
+        if (!window.$) {
+            window.$ = tmp;
+        }
+    }
 
     $().ready(mainAutoEvolveScript);
 })($);

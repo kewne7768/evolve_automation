@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.133
+// @version      3.3.1.134
 // @description  try to take over the world!
 // @downloadURL  https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.user.js
 // @updateURL    https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.meta.js
@@ -7709,7 +7709,7 @@ declare global {
 
             if (!game.global.settings.mKeys) {
                 this._mode = "none";
-            } else if (keys.length !== uniq.length) {
+            } else if (!uniq) {
                 this._mode = "unset";
             } else if (this._allFn && ['x100', 'x25', 'x10'].every(key => ['Shift', 'Control', 'Alt', 'Meta'].includes(game.global.settings.keyMap[key]))) {
                 this._mode = "all";
@@ -13192,9 +13192,7 @@ declare global {
                         // This check is mainly so that power producing buildings don't turn off when rate of change goes negative.
                         // That can cause massive loss of life if turning off space habitats :-)
                         continue;
-                    }
-                    else if (resourceType.resource === resources.Tau_Belt_Support)
-                    {
+                    } else if (resourceType.resource === resources.Tau_Belt_Support) {
                         // Tau Belt support can be overused
                         continue;
                     }

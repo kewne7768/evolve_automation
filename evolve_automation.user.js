@@ -21747,7 +21747,7 @@ declare global {
     // * there is still a global $ after removal
     // This should be the case most of the time. We still keep the local $ reference to it.
     // This isn't required but helps reduce problems with other scripts bringing their own jQuery copy.
-    if (window && (!unsafeWindow || unsafeWindow === window) && !window.$._data(window.document).events?.['keydown']) {
+    if (window && (typeof unsafeWindow === "undefined" || unsafeWindow === window) && !window.$._data(window.document).events?.['keydown']) {
         let tmp = window.$.noConflict();
         if (!window.$) {
             window.$ = tmp;

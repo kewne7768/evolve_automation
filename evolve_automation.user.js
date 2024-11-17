@@ -12655,11 +12655,16 @@ declare global {
                 if (buildings.SunSwarmSatellite.count >= resources.Sun_Support.maxQuantity) {
                     maxCost = 0;
                 }
-                const maxCount = (maxCost > 0 ? 0 : 1000) + (resources.Sun_Support.maxQuantity - building.count);
+                let maxCount = (maxCost > 0 ? 0 : 1000) + (resources.Sun_Support.maxQuantity - building.count);
 
                 if (!isRealisticNumber(maxCount)) {
                     return;
                 }
+
+                // The game's cost calculation logic isn't optimized for very high numbers and can get really slow.
+                // Limit building to 1000 per tick by default, but to avoid the browser considering the tab frozen,
+                // limit to 100/tick once we get into micro-only territory.
+                maxCount = Math.min(buildings.SunSwarmSatellite.count >= 10000 ? 100 : 1000, maxCount);
 
                 for (let i = 0; i < maxCount; ++i) {
                     if ((building.cost.Money ?? 0) > maxCost || !building.click(true)) {

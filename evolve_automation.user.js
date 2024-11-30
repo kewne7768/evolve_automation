@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.135
+// @version      3.3.1.136
 // @description  try to take over the world!
 // @downloadURL  https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.user.js
 // @updateURL    https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.meta.js
@@ -1726,17 +1726,15 @@
         }
 
         getHabitability() {
-            if (this.id === "junker") {
-                return game.global.genes.challenge ? 1 : 0;
-            }
-            if (this.id === "sludge") {
-                return ((game.global.stats.achieve['ascended'] || game.global.stats.achieve['corrupted']) && game.global.stats.achieve['extinct_junker']) ? 1 : 0;
-            }
-            if (this.id === "ultra_sludge") {
-                return (game.global.stats.achieve['godslayer'] && game.global.stats.achieve['extinct_sludge']) ? 1 : 0;
-            }
-            if (this.id === "hybrid") {
-                return 0;
+            switch (this.id) {
+                case "junker":
+                    return game.global.genes.challenge ? 1 : 0;
+                case "sludge":
+                    return ((game.global.stats.achieve['ascended'] || game.global.stats.achieve['corrupted']) && game.global.stats.achieve['extinct_junker']) ? 1 : 0;
+                case "ultra_sludge":
+                    return (game.global.stats.achieve['godslayer'] && game.global.stats.achieve['extinct_sludge']) ? 1 : 0;
+                case "hybrid":
+                    return 0;
             }
 
             let unboundMod = game.global.blood.unbound >= 4 ? 0.95 :
@@ -9659,6 +9657,16 @@ declare global {
             if (!settingsRaw.hasOwnProperty("buildingsLimitPowered")) {
                 settingsRaw.buildingsLimitPowered = false;
             }
+        }
+
+        // Specific migrations that should only be executed once
+        if (!settingsRaw.migrationVersion || settingsRaw.migrationVersion < 1) {
+            // Moved upwards in default priority list, needs to be executed before resetting building settings
+            // Settings may not exist yet here
+            if (settingsRaw["bld_p_eden-bliss_den"] && settingsRaw["bld_p_eden-rectory"] && settingsRaw["bld_p_eden-encampment"] && settingsRaw["bld_p_eden-bliss_den"] < settingsRaw["bld_p_eden-rectory"]) {
+                settingsRaw["bld_p_eden-rectory"] = settingsRaw["bld_p_eden-encampment"] + 1;
+            }
+            settingsRaw.migrationVersion = 1;
         }
 
         // Apply default settings

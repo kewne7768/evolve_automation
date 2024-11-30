@@ -1736,7 +1736,7 @@
                 return (game.global.stats.achieve['godslayer'] && game.global.stats.achieve['extinct_sludge']) ? 1 : 0;
             }
             if (this.genus === "hybrid") {
-                return game.global.stats.achieve['godslayer'] ? 1 : 0;
+                return 0;
             }
 
             let unboundMod = game.global.blood.unbound >= 4 ? 0.95 :

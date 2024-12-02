@@ -2358,7 +2358,7 @@
         Meditator: new BasicJob("meditator", "Meditator", {smart: true}),
         Hunter: new BasicJob("hunter", "Hunter", {serve: true, smart: true}),
         Farmer: new BasicJob("farmer", "Farmer", {serve: true, smart: true}),
-        //Forager: new BasicJob("forager", "Forager", {serve: true}),
+        Forager: new BasicJob("forager", "Forager", {serve: true, split: true}),
         Lumberjack: new BasicJob("lumberjack", "Lumberjack", {serve: true, split: true, smart: true}),
         QuarryWorker: new BasicJob("quarry_worker", "Quarry Worker", {serve: true, split: true, smart: true}),
         CrystalMiner: new BasicJob("crystal_miner", "Crystal Miner", {serve: true, split: true, smart: true}),
@@ -9125,6 +9125,7 @@ declare global {
             jobCrystalWeighting: 50,
             jobScavengerWeighting: 5,
             jobRaiderWeighting: 20,
+            jobForagerWeighting: 50,
             jobDisableMiners: true,
         }
 
@@ -9150,7 +9151,7 @@ declare global {
         setBreakpoints(jobs.Meditator, -1, -1, -1);
         setBreakpoints(jobs.Hunter, -1, -1, -1);
         setBreakpoints(jobs.Farmer, -1, -1, -1);
-        //setBreakpoints(jobs.Forager, 4, 10, 0);
+        setBreakpoints(jobs.Forager, 4, 10, 0);
         setBreakpoints(jobs.Lumberjack, 4, 10, 0);
         setBreakpoints(jobs.QuarryWorker, 4, 10, 0);
         setBreakpoints(jobs.CrystalMiner, 2, 5, 0);
@@ -10656,6 +10657,7 @@ declare global {
         let quarryWorkerIndex = jobList.indexOf(jobs.QuarryWorker);
         let crystalMinerIndex = jobList.indexOf(jobs.CrystalMiner);
         let scavengerIndex = jobList.indexOf(jobs.Scavenger);
+        let foragerIndex = jobList.indexOf(jobs.Forager);
         let defaultIndex = jobList.findIndex(job => job.isDefault());
 
         let availableWorkers = jobList.reduce((total, job) => total + job.workers, 0);
@@ -11126,6 +11128,7 @@ declare global {
         if (quarryWorkerIndex !== -1 && settings.jobQuarryWeighting > 0) splitJobs.push({index: quarryWorkerIndex, job: jobs.QuarryWorker, weighting: settings.jobQuarryWeighting});
         if (crystalMinerIndex !== -1 && settings.jobCrystalWeighting > 0) splitJobs.push({index: crystalMinerIndex, job: jobs.CrystalMiner, weighting: settings.jobCrystalWeighting});
         if (scavengerIndex !== -1 && settings.jobScavengerWeighting > 0) splitJobs.push({index: scavengerIndex, job: jobs.Scavenger, weighting: settings.jobScavengerWeighting});
+        if (foragerIndex !== -1 && settings.jobForagerWeighting > 0) splitJobs.push({index: foragerIndex, job: jobs.Forager, weighting: settings.jobForagerWeighting});
 
         // Balance lumberjacks, quarry workers, crystal miners and scavengers if they are unlocked
         if (splitJobs.length > 0) {
@@ -11210,10 +11213,9 @@ declare global {
         // After reassignments adjust default job to something with workers, we need that for sacrifices.
         // Meditators not allowed to be default, to prevent other jobs from pulling them. That's a double-edged sword: while single extra meditator should still cover natural growth of population, it's now vulnerable to massive spikes of homelessnes.
         if (!craftOnly && settings.jobSetDefault) {
-            /*if (jobs.Forager.isManaged() && requiredWorkers[jobList.indexOf(jobs.Forager)] > 0) {
+            if (jobs.Forager.isManaged() && requiredWorkers[foragerIndex] > 0) {
                 jobs.Forager.setAsDefault();
-            } else*/
-            if (jobs.QuarryWorker.isManaged() && requiredWorkers[quarryWorkerIndex] > 0) {
+            } else if (jobs.QuarryWorker.isManaged() && requiredWorkers[quarryWorkerIndex] > 0) {
                 jobs.QuarryWorker.setAsDefault();
             } else if (jobs.Lumberjack.isManaged() && requiredWorkers[lumberjackIndex] > 0) {
                 jobs.Lumberjack.setAsDefault();
@@ -20170,6 +20172,7 @@ declare global {
         addSettingsNumber(currentNode, "jobCrystalWeighting", "Final Crystal Miner Weighting", "AFTER allocating breakpoints this weighting will be used to split weighted jobs");
         addSettingsNumber(currentNode, "jobScavengerWeighting", "Final Scavenger Weighting", "AFTER allocating breakpoints this weighting will be used to split weighted jobs");
         addSettingsNumber(currentNode, "jobRaiderWeighting", "Final Raider Weighting", "AFTER allocating breakpoints this weighting will be used to split weighted jobs");
+        addSettingsNumber(currentNode, "jobForagerWeighting", "Final Forager Weighting", "AFTER allocating breakpoints this weighting will be used to split weighted jobs");
         addSettingsToggle(currentNode, "jobDisableMiners", "Disable miners in Andromeda", "Disable Miners and Coal Miners after reaching Andromeda");
 
         currentNode.append(`

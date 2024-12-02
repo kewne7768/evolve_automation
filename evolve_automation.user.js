@@ -13532,6 +13532,7 @@ declare global {
                 let resourceType = building.consumption[j];
                 // If resource rate is negative then we are gaining resources. So, only check if we are consuming resources
                 if (resourceType.rate > 0) {
+                    const adjustedRate = building.getFuelRate(j);
                     if (!resourceType.resource.isUnlocked()) {
                         maxStateOn = 0;
                         break;
@@ -13552,7 +13553,7 @@ declare global {
                         if (resourceType.resource.storageRatio > 0.05 || isHungryRace()) {
                             continue;
                         }
-                    } else if (!(resourceType.resource instanceof Support) && resourceType.resource.currentQuantity >= (maxStateOn * CONSUMPTION_BALANCE_MIN * resourceType.rate)) {
+                    } else if (!(resourceType.resource instanceof Support) && resourceType.resource.currentQuantity >= (maxStateOn * CONSUMPTION_BALANCE_MIN * adjustedRate)) {
                         // If we have more than 60 seconds of max consumption worth then its ok to lose some resources.
                         // This check is mainly so that power producing buildings don't turn off when rate of change goes negative.
                         // That can cause massive loss of life if turning off space habitats :-)
@@ -13562,7 +13563,7 @@ declare global {
                         continue;
                     }
 
-                    let supportedAmount = resourceType.resource.rateOfChange / resourceType.rate;
+                    let supportedAmount = resourceType.resource.rateOfChange / adjustedRate;
                     if (resourceType.resource === resources.Womlings_Support) {
                         // Womlings facilities can run understaffed
                         supportedAmount = Math.ceil(supportedAmount);

@@ -9495,9 +9495,7 @@
         // After reassignments adjust default job to something with workers, we need that for sacrifices.
         // Meditators not allowed to be default, to prevent other jobs from pulling them. That's a double-edged sword: while single extra meditator should still cover natural growth of population, it's now vulnerable to massive spikes of homelessnes.
         if (!craftOnly && settings.jobSetDefault) {
-            if (jobs.Forager.isManaged() && requiredWorkers[foragerIndex] > 0) {
-                jobs.Forager.setAsDefault();
-            } else if (jobs.QuarryWorker.isManaged() && requiredWorkers[quarryWorkerIndex] > 0) {
+            if (jobs.QuarryWorker.isManaged() && requiredWorkers[quarryWorkerIndex] > 0) {
                 jobs.QuarryWorker.setAsDefault();
             } else if (jobs.Lumberjack.isManaged() && requiredWorkers[lumberjackIndex] > 0) {
                 jobs.Lumberjack.setAsDefault();
@@ -9505,6 +9503,8 @@
                 jobs.CrystalMiner.setAsDefault();
             } else if (jobs.Scavenger.isManaged() && requiredWorkers[scavengerIndex] > 0) {
                 jobs.Scavenger.setAsDefault();
+            } else if (jobs.Forager.isManaged()) {
+                jobs.Forager.setAsDefault();
             } else if (jobs.Hunter.isManaged()) {
                 jobs.Hunter.setAsDefault();
             } else if (jobs.Farmer.isManaged()) {
@@ -9523,6 +9523,10 @@
                     jobs.QuarryWorker.setAsDefault();
                 } else if (jobs.Lumberjack.isUnlocked()) {
                     jobs.Lumberjack.setAsDefault();
+                } else if (jobs.Forager.isUnlocked()) {
+                    jobs.Forager.setAsDefault();
+                } else if (jobs.Hunter.isManaged()) {
+                    jobs.Hunter.setAsDefault();
                 } else {
                     // Can't avoid it...
                     jobs.Unemployed.setAsDefault();

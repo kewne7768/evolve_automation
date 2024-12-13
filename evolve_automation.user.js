@@ -587,7 +587,11 @@
         }
 
         requestQuantity(req) {
-            if (this.currentQuantity < req && this.requestedQuantity < req) {
+            if (this.requestedQuantity < req) {
+                // We can't request more than our storage.
+                // TODO: Resources with consumption can usually never be max due to game processing order
+                // and should have their request quantity limit a little lower than max.
+                req = Math.min(req, this.maxQuantity);
                 this.requestedQuantity = req;
             }
         }

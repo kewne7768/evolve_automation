@@ -2276,6 +2276,8 @@
 
         whiteholeLastStabilise: 0,
         whiteholeLastExoticMass: 0,
+
+        governorFired: 0,
     };
 
     // Class instances
@@ -7915,6 +7917,7 @@ declare global {
             mech_scrap: "Mech Scrap",
             outer_fleet: "True Path Fleet",
             mutation: "Mutations",
+            governor_fire: "Governor Firing",
             prestige: "Prestige"
         },
 
@@ -8907,6 +8910,8 @@ declare global {
             govFinal: GovernmentManager.Types.technocracy.id,
             govSpace: GovernmentManager.Types.corpocracy.id,
             govGovernor: "none",
+            govGovernorAllowFire: false,
+            govGovernorFireMaxCost: 0,
         }
 
         applySettings(def, reset);
@@ -10278,13 +10283,38 @@ declare global {
         }
 
         // Appoint governor
-        if (haveTech("governor") && settings.govGovernor !== "none" && getGovernor() === "none") {
-            let candidates = game.global.race.governor?.candidates ?? [];
-            for (let i = 0; i < candidates.length; i++) {
-                if (candidates[i].bg === settings.govGovernor) {
-                    getVueById("candidates")?.appoint(i);
-                    break;
+        if (haveTech("governor") && settings.govGovernor !== "none") {
+            if (getGovernor() === "none") {
+                let candidates = game.global.race.governor?.candidates ?? [];
+                for (let i = 0; i < candidates.length; i++) {
+                    if (candidates[i].bg === settings.govGovernor) {
+                        getVueById("candidates")?.appoint(i);
+                        break;
+                    }
                 }
+            }
+            else if (settings.govGovernorAllowFire && settings.govGovernorFireMaxCost >= 50 && game.global.race.governor && getGovernor() !== settings.govGovernor) {
+                const fireCost = ((10 + (game.global.race.governor?.f??0)) ** 2) - 50;
+                if (fireCost < 50 || !Number.isFinite(fireCost)) return; // Sanity check in case some game update breaks it
+
+                if (fireCost > settings.govGovernorFireMaxCost) return; // User's maximum
+
+                // Minimum 60s cooldown between firing or sending the log message that we're not going to fire
+                const now = Date.now();
+                if (state.governorFired > (now - 60000)) return;
+                state.governorFired = now;
+
+                // Extra hardcoded minimum for safety reasons to avoid becoming a noob trap or spending precious antiplasmids
+                let currency = game.global.race.universe === "antimatter" ? resources.AntiPlasmid : resources.Plasmid;
+                const safetyThreshold = 5000;
+                if ((currency.currentQuantity - fireCost) < safetyThreshold) {
+                    GameLog.logWarning("governor_fire", `Would fire current governor ${getGovernor()} and replace with ${settings.govGovernor} but you would not meet the hardcoded safety threshold of ${safetyThreshold} ${currency.name} after deducting ${fireCost}.`, ["progress"]);
+                    return;
+                }
+
+                state.governorFired = now;
+                GameLog.logSuccess("governor_fire", `Firing current governor ${getGovernor()}, will be replaced with ${settings.govGovernor} at cost of ${fireCost} ${currency.name}.`, ["progress"]);
+                getVueById('govOffice').fire();
             }
         }
     }
@@ -18073,6 +18103,14 @@ declare global {
 
         let governorsOptions = [{val: "none", label: "None", hint: "Do not select governor"}, ...governors.map(id => ({val: id, label: game.loc(`governor_${id}`), hint: game.loc(`governor_${id}_desc`)}))];
         addSettingsSelect(currentNode, "govGovernor", "Governor", "Chosen governor will be appointed.", governorsOptions);
+
+        // Trying very hard to avoid becoming a noob trap here.
+        // If we had only a toggle, it would require user action to avoid draining all plasmids, and be a very costly override to get wrong.
+        // The number also exists so users have to input it themselves and know what they are enabling, instead of just looking through
+        // a massive list of toggles, going "that sounds good" and turning it on while barely understanding the cost creep mechanic.
+        // So both exist, we use both in a clear way, and both are disabled by default.
+        addSettingsToggle(currentNode, "govGovernorAllowFire", "Allow firing governor", "Allow firing governor at game's usual Plasmid/Anti-Plasmid cost (minimum 50). Governor will be fired if a different governor is selected and the firing cost is below maximum cost specified. Will not fire if governor would be replaced with 'none', will attempt to avoid firing more often than once every 60 seconds, and will not work if below a hardcoded safety threshold.");
+        addSettingsNumber(currentNode, "govGovernorFireMaxCost", "Governor firing max Plasmid/Anti-Plasmid cost", "Maximum cost to pay per firing (not cumulative). No effect if firing toggle is disabled. Default of 0 is safe and also prevents firing; this must be increased from 0 to at least 50 for it to work at all.");
 
         document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;
     }

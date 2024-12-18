@@ -2899,7 +2899,7 @@
           () => 0
       ],[
           () => haveTech('piracy'),
-          (building) => building === buildings.StargateDefensePlatform && buildings.StargateDefensePlatform.count * 20 >= (game.global.race['instinct'] ? 0.09 : 0.1) * game.global.tech.piracy,
+          (building) => building === buildings.StargateDefensePlatform && (buildings.StargateDefensePlatform.count * 20) >= ((game.global.race['instinct'] ? 0.09 : 0.1) * game.global.tech.piracy * getPiracyMultiplier()),
           () => "Piracy fully supressed",
           () => 0
       ],[

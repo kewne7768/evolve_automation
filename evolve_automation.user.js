@@ -6833,6 +6833,12 @@ declare global {
     class Project extends Action {
         /** Progress towards next one, number from 0 to 99. */
         progress: number;
+
+        /** Cost for one step, depending on step value & adjustment */
+        cost: ResourceList;
+
+        /** The full remaining cost of the project */
+        fullRemainingCost: ResourceList;
     }
 
     /** Research. */

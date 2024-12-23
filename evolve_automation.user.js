@@ -10324,15 +10324,18 @@
             return;
         }
 
-        // Cannot assign if there is no governor, or matter replicator has not been reserached
+        // Cannot assign if there is no governor, matter replicator has not been reserached, or governor office is not yet rendered
         if (getGovernor() === "none" || !haveTech("replicator")) {
+            return;
+        }
+        const office = getVueById("govOffice");
+        if (!office) {
             return;
         }
 
         var replicatorTaskIndex = Object.values(game.global.race.governor.tasks).findIndex(task => task === 'replicate');
 
         // If the replicator task is not yet assigned, assign it to the first free slot
-        const office = getVueById("govOffice");
         if (replicatorTaskIndex == -1) {
             replicatorTaskIndex = Object.values(game.global.race.governor.tasks).findIndex(task => task === 'none');
 
@@ -10344,7 +10347,10 @@
             office.setTask('replicate', replicatorTaskIndex);
         }
 
-        const govSettings = office.c.replicate;
+        const govSettings = office.c?.replicate;
+        if (!govSettings) {
+            return;
+        }
         let changed = false;
         if (govSettings.pow.on == false) {
             // Enable auto power management

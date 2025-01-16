@@ -13096,7 +13096,7 @@ declare global {
         }
 
         // Don't use Dark Bomb if not enabled
-        if (itemId === "tech-dark_bomb" && (!settings.prestigeDemonicBomb || settings.prestigeType !== "infusion")) {
+        if (itemId === "tech-dark_bomb" && (!settings.prestigeDemonicBomb || settings.prestigeType !== "demonic")) {
             return "Dark Bomb disabled";
         }
 
@@ -13403,7 +13403,7 @@ declare global {
                 }
                 // Disable Waygate once it cleared, or if we're going to use bomb, or current potential is too hight
                 if (building === buildings.SpireWaygate && (haveTech("waygate", 3)
-                     || (settings.prestigeDemonicBomb && game.global.stats.spire[poly.universeAffix()]?.dlstr > 0)
+                     || (settings.prestigeDemonicBomb && settings.prestigeType === "demonic" && game.global.stats.spire[poly.universeAffix()]?.dlstr > 0)
                      || (settings.autoMech && MechManager.mechsPotential > settings.mechWaygatePotential && !(settings.autoPrestige && settings.prestigeType === "demonic" && buildings.SpireTower.count >= settings.prestigeDemonicFloor)))) {
                       maxStateOn = 0;
                 }

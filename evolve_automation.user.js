@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.138
+// @version      3.3.1.139
 // @description  try to take over the world!
 // @downloadURL  https://github.com/Vollch/Evolve-Automation/raw/master/evolve_automation.user.js
 // @updateURL    https://github.com/Vollch/Evolve-Automation/raw/master/evolve_automation.meta.js
@@ -9912,6 +9912,7 @@
         }
 
         let allProducts = Object.values(FactoryManager.Productions);
+        let reallyAllProducts = allProducts.slice();
 
         // Init adjustment, and sort groups by priorities
         let priorityGroups = {};
@@ -9947,7 +9948,7 @@
         const scalingFactor = settings.productionFactoryWeighting === "buildings" && state.unlockedBuildings.length > 0
             ? (resource) => findRequiredResourceWeight(resource) ?? 100
             : () => 1;
-        const scaledWeights = Object.fromEntries(allProducts.map(production => [production.resource.id, production.weighting * scalingFactor(production.resource)]));
+        const scaledWeights = Object.fromEntries(reallyAllProducts.map(production => [production.resource.id, production.weighting * scalingFactor(production.resource)]));
 
         // Calculate amount of factories per product
         let remainingFactories = FactoryManager.maxOperating();
@@ -10032,7 +10033,7 @@
         }
 
         // First decrease any production so that we have room to increase others
-        for (let production of allProducts) {
+        for (let production of reallyAllProducts) {
             if (factoryAdjustments[production.id] !== undefined) {
                 let deltaAdjustments = factoryAdjustments[production.id] - FactoryManager.currentProduction(production);
 
@@ -10043,7 +10044,7 @@
         }
 
         // Increase any production required (if they are 0 then don't do anything with them)
-        for (let production of allProducts) {
+        for (let production of reallyAllProducts) {
             if (factoryAdjustments[production.id] !== undefined) {
                 let deltaAdjustments = factoryAdjustments[production.id] - FactoryManager.currentProduction(production);
 

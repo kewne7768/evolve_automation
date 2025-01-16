@@ -9912,7 +9912,6 @@
         }
 
         let allProducts = Object.values(FactoryManager.Productions);
-        let reallyAllProducts = allProducts.slice();
 
         // Init adjustment, and sort groups by priorities
         let priorityGroups = {};
@@ -9938,17 +9937,21 @@
             priorityList[0].push(...priorityGroups["-1"]);
         }
 
+        let onDemand = false;
         if (settings.productionFactoryWeighting === "demanded") {
             let usefulProducts = allProducts.filter(production => production.resource.currentQuantity < production.resource.storageRequired);
             if (usefulProducts.length > 0) {
-                allProducts = usefulProducts;
+                onDemand = true;
             }
         }
 
-        const scalingFactor = settings.productionFactoryWeighting === "buildings" && state.unlockedBuildings.length > 0
-            ? (resource) => findRequiredResourceWeight(resource) ?? 100
-            : () => 1;
-        const scaledWeights = Object.fromEntries(reallyAllProducts.map(production => [production.resource.id, production.weighting * scalingFactor(production.resource)]));
+        const scalingFactor = 
+            settings.productionFactoryWeighting === "buildings" && state.unlockedBuildings.length > 0 
+                ? (resource) => (findRequiredResourceWeight(resource) ?? 100) :
+            settings.productionFactoryWeighting === "demanded" && onDemand 
+                ? (resource) => (resource.currentQuantity < resource.storageRequired ? 1 : 0) :
+            () => 1;
+        const scaledWeights = Object.fromEntries(allProducts.map(production => [production.resource.id, production.weighting * scalingFactor(production.resource)]));
 
         // Calculate amount of factories per product
         let remainingFactories = FactoryManager.maxOperating();
@@ -10033,7 +10036,7 @@
         }
 
         // First decrease any production so that we have room to increase others
-        for (let production of reallyAllProducts) {
+        for (let production of allProducts) {
             if (factoryAdjustments[production.id] !== undefined) {
                 let deltaAdjustments = factoryAdjustments[production.id] - FactoryManager.currentProduction(production);
 
@@ -10044,7 +10047,7 @@
         }
 
         // Increase any production required (if they are 0 then don't do anything with them)
-        for (let production of reallyAllProducts) {
+        for (let production of allProducts) {
             if (factoryAdjustments[production.id] !== undefined) {
                 let deltaAdjustments = factoryAdjustments[production.id] - FactoryManager.currentProduction(production);
 

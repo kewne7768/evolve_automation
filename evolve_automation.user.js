@@ -8355,6 +8355,11 @@ declare global {
             if (id === "protoplasm") {
                 continue;
             }
+            // TODO: 'hybrid' race is partially coded in the game but currently unavailable for use, avoid displaying it
+            // This check should be removed after implementation
+            if (id === "hybrid") {
+                continue;
+            }
 
             races[id] = new Race(id);
             let evolutionPath;

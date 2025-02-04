@@ -1815,7 +1815,7 @@
                 case "ultra_sludge":
                     return "Ultra Failed Experiment unlocked.";
                 case "custom":
-                    return game.loc('wiki_achieve_ascended');
+                    return `Complete an Ascension reset and be on a suitable planet for your chosen genus (${this.genus ? game.loc('genelab_genus_' + this.genus) : 'not set'}).`;
                 case "hybrid":
                     return "???";
             }

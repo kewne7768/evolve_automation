@@ -1545,7 +1545,7 @@
         }
 
         get name() {
-            return game.races[this.id].name ?? "Custom";
+            return game.races[this.id].name ?? `Custom (${this.id} slot)`;
         }
 
         get desc() {

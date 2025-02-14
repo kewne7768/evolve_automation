@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.139
+// @version      3.3.1.140
 // @description  try to take over the world!
 // @downloadURL  https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.user.js
 // @updateURL    https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.meta.js
@@ -1432,6 +1432,38 @@
     }
 
     class Technology {
+        // These techs have the same name as some others - use a descriptor for disambiguation
+        static techDiscriminators = {
+            wind_plant: "Power",
+            demonic_craftsman: "Evil",
+            evil_planning: "Evil",
+            adamantite_processing_flier: "Flier",
+            alt_anthropology: "Post-Transcendence",
+            alt_fanaticism: "Post-Transcendence",
+            study_alt: "Post-Preeminence",
+            deify_alt: "Post-Preeminence",
+            dyson_sphere: "Plans",
+            unification: "Plans",
+            exotic_infusion: "1st Warning",
+            infusion_check: "2nd Warning",
+            protocol66: "Warning",
+            bac_tanks_tp: "True Path",
+            ai_core_tp: "True Path",
+            terraforming_tp: "True Path",
+            higgs_boson_tp: "True Path",
+            stanene_tp: "True Path",
+            graphene_tp: "True Path",
+            virtual_reality_tp: "True Path",
+            adamantite_vault_tp: "True Path",
+            iridium_smelting: "True Path",
+            bolognium_crates_tp: "True Path",
+            adamantite_containers_tp: "True Path",
+            orichalcum_panels_tp: "True Path",
+            dreadnought_ship: "True Path",
+            fusion_generator: "True Path",
+            replicator: "Lone Survivor"
+        };
+
         constructor(id) {
             this._id = id;
 
@@ -1456,8 +1488,8 @@
         get title() {
             let def = this.definition;
             let title = typeof def.title === 'function' ? def.title() : def.title;
-            if (def.path && def.path.includes('truepath') && !def.path.includes('standard')) {
-                title += ` (${game.loc('evo_challenge_truepath')})`;
+            if (this._id in Technology.techDiscriminators) {
+                title += ` (${Technology.techDiscriminators[this._id]})`;
             }
             return title;
         }
@@ -2028,7 +2060,7 @@
         }
 
         canMutate(action) {
-            let currentPlasmids = resources[game.global.race.universe === "antimatter" ? "Antiplasmid" : "Plasmid"].currentQuantity;
+            let currentPlasmids = resources[game.global.race.universe === "antimatter" ? "AntiPlasmid" : "Plasmid"].currentQuantity;
             return currentPlasmids - this.mutationCost(action) >= MutableTraitManager.minimumPlasmidsToPreserve
               && !((game.global.race.species === "sludge" || game.global.race.species === "ultra_sludge") && game.global.race["modified"]);
         }
@@ -2316,7 +2348,7 @@
         Blood_Stone: new PrestigeResource("Blood Stone", "Blood_Stone"),
         Artifact: new PrestigeResource("Artifact", "Artifact"),
         Plasmid: new PrestigeResource("Plasmid", "Plasmid"),
-        Antiplasmid: new PrestigeResource("Anti-Plasmid", "AntiPlasmid"),
+        AntiPlasmid: new PrestigeResource("Anti-Plasmid", "AntiPlasmid"),
         Supercoiled: new PrestigeResource("Supercoiled", "Supercoiled"),
         Phage: new PrestigeResource("Phage", "Phage"),
         Dark: new PrestigeResource("Dark", "Dark"),
@@ -14079,13 +14111,13 @@ declare global {
             return;
         }
 
-        let currency = game.global.race.universe === "antimatter" ? resources.Antiplasmid : resources.Plasmid;
+        let currency = game.global.race.universe === "antimatter" ? resources.AntiPlasmid : resources.Plasmid;
 
         for (let trait of m.priorityList) {
             if (trait.canGain()) {
                 let mutationCost = trait.mutationCost('gain');
                 m.gainTrait(trait.traitName);
-                GameLog.logSuccess("mutation", `Mutating in ${trait.name} for ${mutationCost} ${currency.name}`);
+                GameLog.logSuccess("mutation", `Mutating in ${trait.name} for ${mutationCost} ${currency.name}`, ['progress']);
                 currency.currentQuantity -= mutationCost;
                 return; // only mutate one trait per tick, to reduce lag
             }
@@ -14093,7 +14125,7 @@ declare global {
             if (trait.canPurge()) {
                 let mutationCost = trait.mutationCost('purge');
                 m.purgeTrait(trait.traitName);
-                GameLog.logSuccess("mutation", `Mutating out ${trait.name} for ${mutationCost} ${currency.name}`);
+                GameLog.logSuccess("mutation", `Mutating out ${trait.name} for ${mutationCost} ${currency.name}`, ['progress']);
                 currency.currentQuantity -= mutationCost;
                 return; // only mutate one trait per tick, to reduce lag
             }

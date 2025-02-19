@@ -7566,112 +7566,6 @@ declare global {
             });
         }
 
-        static async uiGraphs() {
-            // We need the thing to be visible first so we can't use the builder function.
-            // Otherwise Chart.js doesn't like it.
-            // Annoying.
-            let modalBody;
-            openOptionsModal("WIP graph (no options yet)", (b) => { modalBody = b; });
-
-            modalBody.html("Waiting for data to load...");
-            let entries = await this.getPrestiges({
-                filterGraphExclude: true,
-            });
-
-            modalBody.html("");
-            let canvas = $(`<canvas id="script-prestigedb-canvas" style="width: 400px; height: 300px">`).appendTo(modalBody);
-
-            const pluckEm = (entries, property) => entries.map(e => getPathProperty(e, property));
-
-            // Returns an array of strings.
-            const renderEntryTooltip = (entry) => {
-                return [
-                    `Reset #${entry.reset}: ${entry.days} days, ${entry.alevel-1}* ${entry.prestigeType} [${entry.stars.join(', ')}]`,
-                    `Species: ${entry.species === 'custom' ? entry.customSpeciesName : entry.species}`,
-                    `${entry.logString??'More stuff goes here I guess'}`,
-                ];
-            };
-
-            // From "Zeileis, Hornik and Murrell (2009): Escaping RGBland: Selecting Colors for Statistical Graphics // Computational Statistics & Data Analysis Volume 53, Issue 9, 1 July 2009, Pages 3259-3270"
-            const allColors = ['#023FA5', '#7D87B9', '#BEC1D4', '#D6BCC0', '#BB7784', '#8E063B', '#4A6FE3', '#8595E1', '#B5BBE3', '#E6AFB9', '#E07B91', '#D33F6A', '#11C638', '#8DD593', '#C6DEC7', '#EAD3C6', '#F0B98D', '#EF9708', '#0FCFC0', '#9CDED6', '#D5EAE7', '#F3E1EB', '#F6C4E1', '#F79CD4'];
-            let curColor = 0;
-            const getColor = () => {
-                if (curColor > allColors.length) curColor = 0;
-                return allColors[curColor++];
-            };
-
-            const mkDataset = (property, label, extra) => {
-                return {
-                    label,
-                    data: pluckEm(entries, property),
-                    borderColor: getColor(),
-                    ...(extra ? extra : {}),
-                };
-            };
-
-            const datasets = [
-                mkDataset("days", "Days"),
-                mkDataset(["milestones", "Womlings"], "Womlings", { fill: false, showLine: false }),
-                mkDataset(["milestones", "TouristCenter"], "Tourism", { fill: "start" }),
-                mkDataset(["milestones", "tech-quantum_manufacturing"], "Quantum", { fill: "-1" }),
-                mkDataset(["milestones", "BlackholeStargateComplete"], "Stargate", { fill: "-1" }),
-                mkDataset(["milestones", "GorddonEmbassy"], "Embassy", { fill: "-1" }),
-                mkDataset(["milestones", "Alien2Foothold"], "Alien2", { fill: "-1" }),
-                mkDataset(["milestones", "ChthonianMission"], "Chthonian", { fill: "-1" }),
-            ];
-
-            // Pre-process the datasets to add fill colors where possible.
-            for (let i = 0; i < datasets.length; ++i) {
-                if (datasets[i].fill === '-1' && i > 0) {
-                    let newFill = {target: datasets[i].fill};
-                    if (datasets[i - 1]?.borderColor) { newFill.above = datasets[i - 1].borderColor; }
-                    datasets[i].fill = newFill;
-                }
-            }
-
-            // Fill days to the last milestone.
-            datasets[0].fill = { target: datasets.length - 1, above: datasets[datasets.length-1].borderColor };
-
-            //console.info("Datasets %o", datasets);
-
-            const config = {
-                type: "line",
-                data: {
-                    labels: pluckEm(entries, "reset"),
-                    datasets: datasets,
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            position: 'top',
-                        },
-                        title: {
-                            display: true,
-                            text: 'Resets to Days'
-                        },
-                        tooltip: {
-                            callbacks: {
-                                afterBody: (ti) => {
-                                    let strs = [];
-                                    // This can in theory show multiple points in the same tooltip or something like that
-                                    for (let tooltip of ti) {
-                                        let entry = entries[tooltip.dataIndex];
-                                        strs.push(...renderEntryTooltip(entry));
-                                    }
-                                    return strs;
-                                }
-                            }
-                        }
-                    }
-                }
-
-            };
-
-            let chart = new Chart(canvas, config);
-            this._chart = chart; // for debugging only really, leaks
-        }
-
         static async importDatabase(json) {
             // Expected to get a plain object with .entries as array.
             // Milestones are not yet touched, but may be in the future.
@@ -21018,15 +20912,9 @@ declare global {
         let enabledNode = addSettingsToggle(currentNode, "prestigeDBenabled", "Enable prestige database", "Keeps track of your prestige times in a database. Activating this setting may pop up a dialog asking for data storage permissions. Do not add an override to this setting, add it to the log setting instead.", initPrestigeDB, initPrestigeDB);
         enabledNode.off("click"); // hack to prevent overrides, this is a technical setting only present because of the additional permissions required
 
-        // TODO: Hide all of this if the database has never been enabled.
-        // TODO: Consider moving this to a different section. (I'm too lazy to set up scaffolding...)
         let prestigeDBsection = $("<div>");
         currentNode.append(prestigeDBsection);
         addSettingsToggle(prestigeDBsection, "prestigeDBlog", "Log entries", "Adds new entries to the database. (Use an override on this setting to disable logging irrelevant runs.)");
-
-        $(`<button class="button" style="margin: 6px 6px 6px 0">Open Graphs</button>`).on("click", e => {
-            PrestigeDBManager.uiGraphs();
-        }).appendTo(prestigeDBsection);
 
         addSettingsHeader2(prestigeDBsection, "Prestige DB: Import/export");
 

@@ -15,7 +15,7 @@ Summary of changes:
 ** By default, when using "Prioritize Steel" mode, all smelters will be set to Steel. If Iron is in demand, it will dedicate "Maximum Iron Ratio" % of smelters to Iron instead.
 ** When using the new "Configured Iron Ratio" mode, it will always split smelters according to that ratio. Even if it's 0. You do you.
 ** Note that Iridium is split off *first* when available (mimics old behavior). If you set the Iridium ratio to 0.3 and the Iron ratio to 0.5, then the real ratio will be 30% Iridium, 35% Iron, 35% Steel.
-* Prestige logging database. This can be enabled under Logging Settings. Unfortunately, at the moment, configuration for this feature is almost nonexistent aside from on/off. There is a builtin hard-coded graph available set up to accompany T4 farm runs with [this snippet](https://github.com/kewne7768/snippet-samples/blob/main/Prestige%20Log%20Milestones.js) installed. You can also export your run database to CSV or JSON and process it using your favorite data visualization tools.
+* Prestige logging database. This can be enabled under Logging Settings. You can export your run database to CSV or JSON and process it using your favorite data visualization tools. This was originally intended to have more functionality, but I didn't get to it before [evolve-analytics](https://github.com/roman-vorobiov/evolve-analytics) vastly exceeded what I would've implemented; consider installing that instead.
 * Misc fixes I'd like to send back but haven't had the time to properly go and test
 
 You can find the official version by Volch [here](https://github.com/Vollch/Evolve-Automation).

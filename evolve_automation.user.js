@@ -15658,9 +15658,9 @@ declare global {
         let strings = settingsRaw.logFilter.split(/[^0-9a-z_%]/g).filter(Boolean);
         for (let i = 0; i < strings.length; i++) {
             let [id, ...params] = strings[i].split("%");
-            params = params.map(game.loc);
+            params = params.map(poly.loc);
             // Loot message built from multiple strings without tokens, let's fake one for regexp below
-            let message = game.loc(id, params.length ? params : undefined) + (id === "civics_garrison_gained" ? "%0" : "");
+            let message = poly.loc(id, params.length ? params : undefined) + (id === "civics_garrison_gained" ? "%0" : "");
             if (message === id) {
                 continue;
             }
@@ -19621,10 +19621,10 @@ declare global {
         addSettingsSelect(currentNode, "psychicBoostRes", "Boosted Resource", "Resource for Boost Resource Production psychic power.", psychicBoost);
 
         let wishMinor = [{ val: "none", label: "None", hint: "Disable using minor wishes." },
-            ...wishData.minor.map(w => ({ val: w.id, label: game.loc('wish_for', [game.loc(w.loc)]) }))];
+            ...wishData.minor.map(w => ({ val: w.id, label: poly.loc('wish_for', [poly.loc(w.loc)]) }))];
         addSettingsSelect(currentNode, "wishMinor", "Minor Wish", "Uses this minor wish when available.", wishMinor);
         let wishMajor = [{ val: "none", label: "None", hint: "Disable using major wishes." },
-            ...wishData.major.map(w => ({ val: w.id, label: game.loc('wish_for', [game.loc(w.loc)]) }))];
+            ...wishData.major.map(w => ({ val: w.id, label: poly.loc('wish_for', [poly.loc(w.loc)]) }))];
         addSettingsSelect(currentNode, "wishMajor", "Major Wish", "Uses this major wish when available.", wishMajor);
 
         addSettingsToggle(currentNode, "jobScalePop", "High Pop job scale", "Auto Job will automatically scaly breakpoints to match population increase");

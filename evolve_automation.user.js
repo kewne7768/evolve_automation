@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.140
+// @version      3.3.1.141
 // @description  try to take over the world!
 // @downloadURL  https://github.com/Vollch/Evolve-Automation/raw/master/evolve_automation.user.js
 // @updateURL    https://github.com/Vollch/Evolve-Automation/raw/master/evolve_automation.meta.js
@@ -14930,6 +14930,9 @@
     }
 
     const argType = {
+        building_cost: {def: "city-farm.Money", arg: "list_cb", options: () =>
+          Object.fromEntries(Object.keys(buildingIds).map(b => Object.keys(buildingIds[b].cost)
+            .map(r => [`${b}.${r}`, {name: `${buildingIds[b].name} (${resources[r].name})`, id: `${b}.${r}`}])).flat())},
         building: {def: "city-farm", arg: "list", options: {list: buildingIds, name: "name", id: "_vueBinding"}},
         research: {def: "tech-mad", arg: "list", options: {list: techIds, name: "name", id: "_vueBinding"}},
 
@@ -15052,6 +15055,7 @@
         SettingDefault: { fn: (s) => settingsRaw[s], arg: "string", def: "masterScriptToggle", desc: "Returns default value of setting, types varies" },
         SettingCurrent: { fn: (s) => settings[s], arg: "string", def: "masterScriptToggle", desc: "Returns current value of setting, types varies" },
         Eval: { fn: (s) => fastEval(s), arg: "string", def: "Math.PI", desc: "Returns result of evaluating code" },
+        BuildingCost: { fn: (id) => { let [b, r] = id.split("."); return buildingIds[b].cost[r] ?? 0; }, ...argType.building_cost, desc: "Return material cost of building as number\n(Due to technical limitations some options might not appear in list until you unlock corresponding building in game)" },
         BuildingUnlocked: { fn: (b) => buildingIds[b].isUnlocked(), ...argType.building, desc: "Return true when building is unlocked" },
         BuildingClickable: { fn: (b) => buildingIds[b].isClickable(), ...argType.building, desc: "Return true when building have all required resources, and can be purchased" },
         BuildingAffordable: { fn: (b) => buildingIds[b].isAffordable(true), ...argType.building, desc: "Return true when building is affordable, i.e. costs of all resources below storage caps" },

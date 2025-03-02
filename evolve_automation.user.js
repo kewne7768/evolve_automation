@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.141
+// @version      3.3.1.142
 // @description  try to take over the world!
 // @downloadURL  https://github.com/Vollch/Evolve-Automation/raw/master/evolve_automation.user.js
 // @updateURL    https://github.com/Vollch/Evolve-Automation/raw/master/evolve_automation.meta.js
@@ -9977,10 +9977,10 @@
             }
         }
 
-        const scalingFactor = 
-            settings.productionFactoryWeighting === "buildings" && state.unlockedBuildings.length > 0 
+        const scalingFactor =
+            settings.productionFactoryWeighting === "buildings" && state.unlockedBuildings.length > 0
                 ? (resource) => (findRequiredResourceWeight(resource) ?? 100) :
-            settings.productionFactoryWeighting === "demanded" && onDemand 
+            settings.productionFactoryWeighting === "demanded" && onDemand
                 ? (resource) => (resource.currentQuantity < resource.storageRequired ? 1 : 0) :
             () => 1;
         const scaledWeights = Object.fromEntries(allProducts.map(production => [production.resource.id, production.weighting * scalingFactor(production.resource)]));
@@ -10796,7 +10796,7 @@
         if ((settings.geneticsSequence === "enabled" && !seq.on) ||
             (settings.geneticsSequence === "disabled" && seq.on) ||
             (settings.geneticsSequence === "decode" &&
-                ((seq.on && mutations >= 1) || 
+                ((seq.on && mutations >= 1) ||
                 (!seq.on && mutations < 1))
             )) {
             geneticsVue.toggle();
@@ -13530,7 +13530,7 @@
             updateActiveTargetsUI(researchList, 'research');
             updateActiveTargetsUI(arpaList, 'arpa');
 
-            // remove from queue by clicking 
+            // remove from queue by clicking
             $(".active-target-remove-x").click(function() {
                 const queueId = $(this).data('queueid'),
                     type = $(this).data('type');
@@ -14673,6 +14673,11 @@
     }
 
     function buildScriptSettings() {
+        // Don't initialize the settings tab until it's been opened
+        if (game.global.settings.civTabs != 7) {
+            return;
+        }
+
         let currentScrollPosition = document.documentElement.scrollTop || document.body.scrollTop;
 
         let scriptContentNode = $('#script_settings');
@@ -14821,50 +14826,53 @@
         });
     }
 
-    function buildSettingsSection(sectionId, sectionName, resetFunction, updateSettingsContentFunction) {
-        $("#script_settings").append(`
+    function buildSettingsSectionImpl(parentNode, sectionId, sectionName, resetFunction, updateSettingsContentFunction) {
+        const triggerID = `${sectionId}SettingsCollapsed`;
+        const resetID = `script_reset${sectionId}`;
+        const contentID = `script_${sectionId}Content`;
+
+        const section = $(`
           <div id="script_${sectionId}Settings" style="margin-top: 10px;">
-            <h3 id="${sectionId}SettingsCollapsed" class="script-collapsible text-center has-text-success">${sectionName} Settings</h3>
+            <h3 id="${triggerID}" class="script-collapsible text-center has-text-success">${sectionName} Settings</h3>
             <div class="script-content">
-              <div style="margin-top: 10px;"><button id="script_reset${sectionId}" class="button">Reset ${sectionName} Settings</button></div>
-              <div style="margin-top: 10px; margin-bottom: 10px;" id="script_${sectionId}Content"></div>
+              <div style="margin-top: 10px;"><button id="${resetID}" class="button">Reset ${sectionName} Settings</button></div>
+              <div style="margin-top: 10px; margin-bottom: 10px;" id="${contentID}"></div>
             </div>
           </div>`);
 
-        updateSettingsContentFunction();
+        parentNode.append(section);
 
         if (!settingsRaw[sectionId + "SettingsCollapsed"]) {
-            let element = document.getElementById(sectionId + "SettingsCollapsed");
+            // The section is open initially - build it now
+            updateSettingsContentFunction();
+
+            let element = document.getElementById(triggerID);
             element.classList.toggle("script-contentactive");
             element.nextElementSibling.style.display = "block";
         }
+        else {
+            // The section is closed - build it only once it's open
+            section.find(`> #${triggerID}`).on("click", () => {
+                if (section.find(`#${contentID}`).is(":empty")) {
+                    updateSettingsContentFunction();
+                }
+            });
+        }
 
-        $("#script_reset" + sectionId).on("click", genericResetFunction.bind(null, resetFunction, sectionName));
+        section.find(`#${resetID}`).on("click", genericResetFunction.bind(null, resetFunction, sectionName));
+    }
+
+    function buildSettingsSection(sectionId, sectionName, resetFunction, updateSettingsContentFunction) {
+        buildSettingsSectionImpl($("#script_settings"), sectionId, sectionName, resetFunction, updateSettingsContentFunction);
     }
 
     function buildSettingsSection2(parentNode, secondaryPrefix, sectionId, sectionName, resetFunction, updateSettingsContentFunction) {
         if (secondaryPrefix !== "") {
             parentNode.append(`<div style="margin-top: 10px; margin-bottom: 10px;" id="script_${secondaryPrefix + sectionId}Content"></div>`);
+            updateSettingsContentFunction(secondaryPrefix);
         } else {
-            parentNode.append(`
-              <div id="script_${sectionId}Settings" style="margin-top: 10px;">
-                <h3 id="${sectionId}SettingsCollapsed" class="script-collapsible text-center has-text-success">${sectionName} Settings</h3>
-                <div class="script-content">
-                  <div style="margin-top: 10px;"><button id="script_reset${sectionId}" class="button">Reset ${sectionName} Settings</button></div>
-                  <div style="margin-top: 10px; margin-bottom: 10px;" id="script_${sectionId}Content"></div>
-                </div>
-              </div>`);
-
-            if (!settingsRaw[sectionId + "SettingsCollapsed"]) {
-                let element = document.getElementById(sectionId + "SettingsCollapsed");
-                element.classList.toggle("script-contentactive");
-                element.nextElementSibling.style.display = "block";
-            }
-
-            $("#script_reset" + sectionId).on("click", genericResetFunction.bind(null, resetFunction, sectionName));
+            buildSettingsSectionImpl(parentNode, sectionId, sectionName, resetFunction, () => updateSettingsContentFunction(""));
         }
-
-        updateSettingsContentFunction(secondaryPrefix);
     }
 
     function genericResetFunction(resetFunction, sectionName) {
@@ -18753,6 +18761,11 @@
     }
 
     function updateUI() {
+        // Don't touch DOM when the tab is in the background
+        if (document.hidden) {
+            return;
+        }
+
         let resetScrollPositionRequired = false;
         let currentScrollPosition = document.documentElement.scrollTop || document.body.scrollTop;
 
@@ -19247,7 +19260,7 @@
 
     // main.js -> Soldier Healing
     function getHealingRate() {
-        let hc = 
+        let hc =
           (game.global.race['orbit_decayed'] && game.global.race['truepath']) ? buildings.EnceladusBase.stateOnCount :
           game.global.race['artifical'] ? buildings.BootCamp.count :
           buildings.Hospital.count;

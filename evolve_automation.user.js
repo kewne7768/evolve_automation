@@ -15069,7 +15069,7 @@
     // TODO: This thing isn't very nice. Ideally each check should declare return type, not only input type. But for now it's only used with triggers which only works with numbers and booleans, so it's fine for now.
     const retBools = ["Boolean", "BuildingUnlocked", "BuildingClickable", "BuildingAffordable", "BuildingQueued", "ProjectUnlocked", "JobUnlocked", "ResearchUnlocked", "ResearchComplete", "ResourceUnlocked", "ResourceSatisfied", "ResourceDemanded", "RacePillared", "RaceGenus", "MimicGenus", "ResetType", "Challenge", "Universe", "Government", "Governor", "PlanetBiome", "PlanetTrait"];
     // No need to show primitives and string function in triggers UI.
-    const overrideOnlyChecks = ["Boolean", "String", "Number", "RaceId"];
+    const overrideOnlyChecks = ["String", "Number", "RaceId"];
 
     // Eval shortener
     function _(check, arg){
@@ -16265,7 +16265,7 @@
     }
 
     function addTriggerSetting() {
-        let trigger = TriggerManager.AddTrigger("ResearchUnlocked", "tech-club", 1, "research", "tech-club", 0);
+        let trigger = TriggerManager.AddTrigger("Boolean", false, 1, "research", "tech-club", 0);
         updateSettingsFromState();
 
         let tableBodyNode = $('#script_triggerTableBody');
@@ -16334,7 +16334,7 @@
         let triggerElement = $('#script_trigger_' + trigger.seq).children().eq(2);
         triggerElement.empty().off("*");
 
-        if (checkTypes[trigger.requirementType]) {
+        if (trigger.requirementType !== "Boolean" && checkTypes[trigger.requirementType]) {
             let retType = retBools.includes(trigger.requirementType) ? "boolean" : "number";
             triggerElement.append(buildInputNode(retType, null, trigger.requirementCount, function(result){
                 trigger.requirementCount = Number(result);

@@ -15722,7 +15722,6 @@
         };
 
         buildSettingsSection(sectionId, sectionName, resetFunction, updateGeneralSettingsContent);
-        buildActiveTargetsUI();
     }
 
     function updateGeneralSettingsContent() {
@@ -16461,45 +16460,43 @@
     }
 
     function buildActiveTargetsUI() {
-        if (settingsRaw.activeTargetsUI && !$("#active_targets-wrapper").length) {
-            $("#buildQueue").before(`
-                <div id="active_targets-wrapper" class="bldQueue vscroll right">
-                    <h2 class="has-text-success">Detailed Queue</h2>
-                    <div id="active_targets">
-                        <div class="target-type-box triggers" style="display: none;">
-                            <h2>Triggers</h2>
-                            <ul class="active_targets-list triggers"></ul>
-                        </div>
-                        <div class="target-type-box buildings" style="display: none;">
-                            <h2>Buildings</h2>
-                            <ul class="active_targets-list buildings"></ul>
-                        </div>
-                        <div class="target-type-box research" style="display: none;">
-                            <h2>Research</h2>
-                            <ul class="active_targets-list research"></ul>
-                        </div>
-                        <div class="target-type-box arpa" style="display: none;">
-                            <h2>A.R.P.A.</h2>
-                            <ul class="active_targets-list arpa"></ul>
-                        </div>
+        $("#buildQueue").before(`
+            <div id="active_targets-wrapper" class="bldQueue vscroll right">
+                <h2 class="has-text-success">Detailed Queue</h2>
+                <div id="active_targets">
+                    <div class="target-type-box triggers" style="display: none;">
+                        <h2>Triggers</h2>
+                        <ul class="active_targets-list triggers"></ul>
                     </div>
-                </div>`);
+                    <div class="target-type-box buildings" style="display: none;">
+                        <h2>Buildings</h2>
+                        <ul class="active_targets-list buildings"></ul>
+                    </div>
+                    <div class="target-type-box research" style="display: none;">
+                        <h2>Research</h2>
+                        <ul class="active_targets-list research"></ul>
+                    </div>
+                    <div class="target-type-box arpa" style="display: none;">
+                        <h2>A.R.P.A.</h2>
+                        <ul class="active_targets-list arpa"></ul>
+                    </div>
+                </div>
+            </div>`);
 
-            // game assumes only message and build queue, and hardcodes heights accordingly. This overrides that to ensure scroll bars are added on message queue when active targets queue crowds it out
-            if (typeof ResizeObserver === 'function') {
-                const resizeObserver = new ResizeObserver((entries) => {
-                    for (const entry of entries) {
-                        if (entry.borderBoxSize) {
-                            const elementHeight = entry.borderBoxSize[0].blockSize;
-                            const totalHeight = `${elementHeight + $(`#buildQueue`).outerHeight()}px`;
+        // game assumes only message and build queue, and hardcodes heights accordingly. This overrides that to ensure scroll bars are added on message queue when active targets queue crowds it out
+        if (typeof ResizeObserver === 'function') {
+            const resizeObserver = new ResizeObserver((entries) => {
+                for (const entry of entries) {
+                    if (entry.borderBoxSize) {
+                        const elementHeight = entry.borderBoxSize[0].blockSize;
+                        const totalHeight = `${elementHeight + $(`#buildQueue`).outerHeight()}px`;
 
-                            $("#msgQueue").css('max-height', `calc((100vh - ${totalHeight}) - 6rem)`);
-                        }
+                        $("#msgQueue").css('max-height', `calc((100vh - ${totalHeight}) - 6rem)`);
                     }
-                });
+                }
+            });
 
-                resizeObserver.observe($("#active_targets-wrapper")[0]);
-            }
+            resizeObserver.observe($("#active_targets-wrapper")[0]);
         }
     }
 
@@ -18855,6 +18852,9 @@
             scriptNode.parent().append(scriptNode);
         }
 
+        if (settingsRaw.activeTargetsUI && $("#active_targets-wrapper").length === 0) {
+            buildActiveTargetsUI();
+        }
         if (settingsRaw.showSettings && $("#script_settings").length === 0) {
             buildScriptSettings();
         }

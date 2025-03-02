@@ -19586,6 +19586,8 @@
         updateUI();
         buildFilterRegExp();
         
+        GameLog.logInfo("special", "Settings successfully imported");
+        
         return true;
     }
 

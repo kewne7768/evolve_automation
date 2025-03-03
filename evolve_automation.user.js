@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.141
+// @version      3.3.1.142
 // @description  try to take over the world!
 // @downloadURL  https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.user.js
 // @updateURL    https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.meta.js
@@ -9775,12 +9775,19 @@ declare global {
         }
         // Migrate pre-overrides settings
         settingsRaw.triggers.forEach(t => {
+            // Normalize manually-added boolean triggers to match UI
+            if (t.requirementType == "Boolean" && t.requirementCount !== 1) {
+                t.requirementId = t.requirementCount ? t.requirementId : !t.requirementId;
+                t.requirementCount = 1;
+            }
+            // Migrate old trigger IDs
             if ((t.requirementType === "unlocked" || t.requirementType === "researched") && techIds["tech-" + t.requirementId]) {
                 t.requirementId = "tech-" + t.requirementId;
             }
             if (t.actionType === "research" && techIds["tech-" + t.actionId]) {
                 t.actionId = "tech-" + t.actionId;
             }
+            // Migrate old trigger checks to overrides
             if (t.requirementType === "unlocked") {
                 t.requirementType = "ResearchUnlocked";
                 t.requirementCount = 1;
@@ -11783,10 +11790,10 @@ declare global {
             }
         }
 
-        const scalingFactor = 
-            settings.productionFactoryWeighting === "buildings" && state.unlockedBuildings.length > 0 
+        const scalingFactor =
+            settings.productionFactoryWeighting === "buildings" && state.unlockedBuildings.length > 0
                 ? (resource) => (findRequiredResourceWeight(resource) ?? 100) :
-            settings.productionFactoryWeighting === "demanded" && onDemand 
+            settings.productionFactoryWeighting === "demanded" && onDemand
                 ? (resource) => (resource.currentQuantity < resource.storageRequired ? 1 : 0) :
             () => 1;
         const scaledWeights = Object.fromEntries(allProducts.map(production => [production.resource.id, production.weighting * scalingFactor(production.resource)]));
@@ -12604,7 +12611,7 @@ declare global {
         if ((settings.geneticsSequence === "enabled" && !seq.on) ||
             (settings.geneticsSequence === "disabled" && seq.on) ||
             (settings.geneticsSequence === "decode" &&
-                ((seq.on && mutations >= 1) || 
+                ((seq.on && mutations >= 1) ||
                 (!seq.on && mutations < 1))
             )) {
             geneticsVue.toggle();
@@ -15522,7 +15529,7 @@ declare global {
             updateActiveTargetsUI(arpaList, 'arpa');
             updateActiveTargetsUI(snippetsList, 'snippets');
 
-            // remove from queue by clicking 
+            // remove from queue by clicking
             $(".active-target-remove-x").click(function() {
                 const queueId = $(this).data('queueid'),
                     type = $(this).data('type');
@@ -16324,6 +16331,10 @@ declare global {
         });
         // Game disables workers in lab ui, we need to check that outside of debug hook
         setInterval(automateLab, 2500);
+
+        // Expose saving/loading functions so that they can be called by other scripts
+        win.importAutomationSettings = importSettings;
+        win.exportAutomationSettings = exportSettings;
     }
 
     function updateDebugData() {
@@ -16790,6 +16801,11 @@ declare global {
     }
 
     function buildScriptSettings() {
+        // Don't initialize the settings tab until it's been opened
+        if (game.global.settings.civTabs != 7) {
+            return;
+        }
+
         let currentScrollPosition = document.documentElement.scrollTop || document.body.scrollTop;
 
         let scriptContentNode = $('#script_settings');
@@ -16867,54 +16883,9 @@ declare global {
         importExportNode.append(' <button id="script_settingsImport" class="button">Import Script Settings</button>');
 
         $('#script_settingsImport').on("click", function() {
-            if ($('#importExport').val().length > 0) {
-                //let saveState = JSON.parse(LZString.decompressFromBase64($('#importExport').val()));
-                let saveState = JSON.parse($('#importExport').val());
-                if (saveState && typeof saveState === "object" && (saveState.scriptName === "TMVictor" || $.isEmptyObject(saveState))) {
-                    let evals = [];
-                    Object.values(saveState.overrides ?? []).forEach(list => list.forEach(override => {
-                        if (override.type1 === "Eval") {
-                            evals.push(override.arg1);
-                        }
-                        if (override.type2 === "Eval") {
-                            evals.push(override.arg2);
-                        }
-                    }));
-                    (saveState.triggers ?? []).forEach(trigger => {
-                        if (trigger.requirementType === "Eval") {
-                            evals.push(trigger.requirementId);
-                        }
-                    });
-                    Object.values(saveState.overrides?.log_prestige_format ?? []).forEach(prestige_log_format_override => {
-                        if (prestige_log_format_override.ret.includes("{eval:")) {
-                            evals.push(prestige_log_format_override.ret);
-                        }
-                    });
-
-                    if ((saveState.log_prestige_format ?? "").includes("{eval:")) {
-                        evals.push(saveState.log_prestige_format);
-                    }
-
-                    if (evals.length > 0 && !confirm("Warning! Imported settings includes evaluated code, which will have full access to browser page, and can be potentially dangerous.\nOnly continue if you trust the source. Injected code:\n" + evals.join("\n"))) {
-                        return;
-                    }
-                    console.log("Importing script settings");
-                    settingsRaw = saveState;
-                    updateStandAloneSettings();
-                    updateStateFromSettings();
-                    updateSettingsFromState();
-                    removeScriptSettings();
-                    removeMechInfo();
-                    removeStorageToggles();
-                    removeMarketToggles();
-                    removeArpaToggles();
-                    removeCraftToggles();
-                    removeBuildingToggles();
-                    removeEjectToggles();
-                    removeSupplyToggles();
-                    $('#autoScriptContainer').remove();
-                    updateUI();
-                    buildFilterRegExp();
+            const str = $('#importExport').val();
+            if (str.length > 0) {
+                if (importSettings(str)) {
                     $('#importExport').val("");
                 }
             }
@@ -16923,9 +16894,7 @@ declare global {
         importExportNode.append(' <button id="script_settingsExport" class="button">Export Script Settings</button>');
 
         $('#script_settingsExport').on("click", function() {
-            //$('#importExport').val(LZString.compressToBase64(JSON.stringify(global)));
-            console.log("Exporting script settings");
-            $('#importExport').val(JSON.stringify(settingsRaw));
+            $('#importExport').val(exportSettings());
             $('#importExport').select();
             document.execCommand('copy');
         });
@@ -16939,50 +16908,53 @@ declare global {
         });
     }
 
-    function buildSettingsSection(sectionId, sectionName, resetFunction, updateSettingsContentFunction) {
-        $("#script_settings").append(`
+    function buildSettingsSectionImpl(parentNode, sectionId, sectionName, resetFunction, updateSettingsContentFunction) {
+        const triggerID = `${sectionId}SettingsCollapsed`;
+        const resetID = `script_reset${sectionId}`;
+        const contentID = `script_${sectionId}Content`;
+
+        const section = $(`
           <div id="script_${sectionId}Settings" style="margin-top: 10px;">
-            <h3 id="${sectionId}SettingsCollapsed" class="script-collapsible text-center has-text-success">${sectionName} Settings</h3>
+            <h3 id="${triggerID}" class="script-collapsible text-center has-text-success">${sectionName} Settings</h3>
             <div class="script-content">
-              <div style="margin-top: 10px;"><button id="script_reset${sectionId}" class="button">Reset ${sectionName} Settings</button></div>
-              <div style="margin-top: 10px; margin-bottom: 10px;" id="script_${sectionId}Content"></div>
+              <div style="margin-top: 10px;"><button id="${resetID}" class="button">Reset ${sectionName} Settings</button></div>
+              <div style="margin-top: 10px; margin-bottom: 10px;" id="${contentID}"></div>
             </div>
           </div>`);
 
-        updateSettingsContentFunction();
+        parentNode.append(section);
 
         if (!settingsRaw[sectionId + "SettingsCollapsed"]) {
-            let element = document.getElementById(sectionId + "SettingsCollapsed");
+            // The section is open initially - build it now
+            updateSettingsContentFunction();
+
+            let element = document.getElementById(triggerID);
             element.classList.toggle("script-contentactive");
             element.nextElementSibling.style.display = "block";
         }
+        else {
+            // The section is closed - build it only once it's open
+            section.find(`> #${triggerID}`).on("click", () => {
+                if (section.find(`#${contentID}`).is(":empty")) {
+                    updateSettingsContentFunction();
+                }
+            });
+        }
 
-        $("#script_reset" + sectionId).on("click", genericResetFunction.bind(null, resetFunction, sectionName));
+        section.find(`#${resetID}`).on("click", genericResetFunction.bind(null, resetFunction, sectionName));
+    }
+
+    function buildSettingsSection(sectionId, sectionName, resetFunction, updateSettingsContentFunction) {
+        buildSettingsSectionImpl($("#script_settings"), sectionId, sectionName, resetFunction, updateSettingsContentFunction);
     }
 
     function buildSettingsSection2(parentNode, secondaryPrefix, sectionId, sectionName, resetFunction, updateSettingsContentFunction) {
         if (secondaryPrefix !== "") {
             parentNode.append(`<div style="margin-top: 10px; margin-bottom: 10px;" id="script_${secondaryPrefix + sectionId}Content"></div>`);
+            updateSettingsContentFunction(secondaryPrefix);
         } else {
-            parentNode.append(`
-              <div id="script_${sectionId}Settings" style="margin-top: 10px;">
-                <h3 id="${sectionId}SettingsCollapsed" class="script-collapsible text-center has-text-success">${sectionName} Settings</h3>
-                <div class="script-content">
-                  <div style="margin-top: 10px;"><button id="script_reset${sectionId}" class="button">Reset ${sectionName} Settings</button></div>
-                  <div style="margin-top: 10px; margin-bottom: 10px;" id="script_${sectionId}Content"></div>
-                </div>
-              </div>`);
-
-            if (!settingsRaw[sectionId + "SettingsCollapsed"]) {
-                let element = document.getElementById(sectionId + "SettingsCollapsed");
-                element.classList.toggle("script-contentactive");
-                element.nextElementSibling.style.display = "block";
-            }
-
-            $("#script_reset" + sectionId).on("click", genericResetFunction.bind(null, resetFunction, sectionName));
+            buildSettingsSectionImpl(parentNode, sectionId, sectionName, resetFunction, () => updateSettingsContentFunction(""));
         }
-
-        updateSettingsContentFunction(secondaryPrefix);
     }
 
     function genericResetFunction(resetFunction, sectionName) {
@@ -17222,7 +17194,7 @@ declare global {
     // TODO: This thing isn't very nice. Ideally each check should declare return type, not only input type. But for now it's only used with triggers which only works with numbers and booleans, so it's fine for now.
     const retBools = ["Boolean", "BuildingUnlocked", "BuildingClickable", "BuildingAffordable", "BuildingQueued", "ProjectUnlocked", "JobUnlocked", "ResearchUnlocked", "ResearchComplete", "ResourceUnlocked", "ResourceSatisfied", "ResourceDemanded", "RacePillared", "RaceGenus", "MimicGenus", "ResetType", "Challenge", "Universe", "Government", "Governor", "PlanetBiome", "PlanetTrait"];
     // No need to show primitives and string function in triggers UI.
-    const overrideOnlyChecks = ["Boolean", "String", "Number", "RaceId"];
+    const overrideOnlyChecks = ["String", "Number", "RaceId"];
 
     // Eval shortener
     function _(check, arg){
@@ -17949,7 +17921,6 @@ declare global {
         };
 
         buildSettingsSection(sectionId, sectionName, resetFunction, updateGeneralSettingsContent);
-        buildActiveTargetsUI();
     }
 
     function updateGeneralSettingsContent() {
@@ -18540,7 +18511,7 @@ declare global {
     }
 
     function addTriggerSetting() {
-        let trigger = TriggerManager.AddTrigger("ResearchUnlocked", "tech-club", 1, "research", "tech-club", 0, true);
+        let trigger = TriggerManager.AddTrigger("Boolean", false, 1, "research", "tech-club", 0, true);
         updateSettingsFromState();
 
         let tableBodyNode = $('#script_triggerTableBody');
@@ -18610,7 +18581,7 @@ declare global {
         let triggerElement = $('#script_trigger_' + trigger.seq).children().eq(2);
         triggerElement.empty().off("*");
 
-        if (checkTypes[trigger.requirementType]) {
+        if (trigger.requirementType !== "Boolean" && checkTypes[trigger.requirementType]) {
             let retType = retBools.includes(trigger.requirementType) ? "boolean" : "number";
             triggerElement.append(buildInputNode(retType, null, trigger.requirementCount, function(result){
                 trigger.requirementCount = Number(result);
@@ -18704,49 +18675,47 @@ declare global {
     }
 
     function buildActiveTargetsUI() {
-        if (settingsRaw.activeTargetsUI && !$("#active_targets-wrapper").length) {
-            $("#buildQueue").before(`
-                <div id="active_targets-wrapper" class="bldQueue vscroll right">
-                    <h2 class="has-text-success">Detailed Queue</h2>
-                    <div id="active_targets">
-                        <div class="target-type-box triggers" style="display: none;">
-                            <h2>Triggers</h2>
-                            <ul class="active_targets-list triggers"></ul>
-                        </div>
-                        <div class="target-type-box buildings" style="display: none;">
-                            <h2>Buildings</h2>
-                            <ul class="active_targets-list buildings"></ul>
-                        </div>
-                        <div class="target-type-box research" style="display: none;">
-                            <h2>Research</h2>
-                            <ul class="active_targets-list research"></ul>
-                        </div>
-                        <div class="target-type-box arpa" style="display: none;">
-                            <h2>A.R.P.A.</h2>
-                            <ul class="active_targets-list arpa"></ul>
-                        </div>
-                        <div class="target-type-box snippets" style="display: none;">
-                            <h2>Snippets</h2>
-                            <ul class="active_targets-list snippets"></ul>
-                        </div>
+        $("#buildQueue").before(`
+            <div id="active_targets-wrapper" class="bldQueue vscroll right">
+                <h2 class="has-text-success">Detailed Queue</h2>
+                <div id="active_targets">
+                    <div class="target-type-box triggers" style="display: none;">
+                        <h2>Triggers</h2>
+                        <ul class="active_targets-list triggers"></ul>
                     </div>
-                </div>`);
+                    <div class="target-type-box buildings" style="display: none;">
+                        <h2>Buildings</h2>
+                        <ul class="active_targets-list buildings"></ul>
+                    </div>
+                    <div class="target-type-box research" style="display: none;">
+                        <h2>Research</h2>
+                        <ul class="active_targets-list research"></ul>
+                    </div>
+                    <div class="target-type-box arpa" style="display: none;">
+                        <h2>A.R.P.A.</h2>
+                        <ul class="active_targets-list arpa"></ul>
+                    </div>
+                    <div class="target-type-box snippets" style="display: none;">
+                        <h2>Snippets</h2>
+                        <ul class="active_targets-list snippets"></ul>
+                    </div>
+                </div>
+            </div>`);
 
-            // game assumes only message and build queue, and hardcodes heights accordingly. This overrides that to ensure scroll bars are added on message queue when active targets queue crowds it out
-            if (typeof ResizeObserver === 'function') {
-                const resizeObserver = new ResizeObserver((entries) => {
-                    for (const entry of entries) {
-                        if (entry.borderBoxSize) {
-                            const elementHeight = entry.borderBoxSize[0].blockSize;
-                            const totalHeight = `${elementHeight + $(`#buildQueue`).outerHeight()}px`;
+        // game assumes only message and build queue, and hardcodes heights accordingly. This overrides that to ensure scroll bars are added on message queue when active targets queue crowds it out
+        if (typeof ResizeObserver === 'function') {
+            const resizeObserver = new ResizeObserver((entries) => {
+                for (const entry of entries) {
+                    if (entry.borderBoxSize) {
+                        const elementHeight = entry.borderBoxSize[0].blockSize;
+                        const totalHeight = `${elementHeight + $(`#buildQueue`).outerHeight()}px`;
 
-                            $("#msgQueue").css('max-height', `calc((100vh - ${totalHeight}) - 6rem)`);
-                        }
+                        $("#msgQueue").css('max-height', `calc((100vh - ${totalHeight}) - 6rem)`);
                     }
-                });
+                }
+            });
 
-                resizeObserver.observe($("#active_targets-wrapper")[0]);
-            }
+            resizeObserver.observe($("#active_targets-wrapper")[0]);
         }
     }
 
@@ -21314,6 +21283,11 @@ declare global {
     }
 
     function updateUI() {
+        // Don't touch DOM when the tab is in the background
+        if (document.hidden) {
+            return;
+        }
+
         let resetScrollPositionRequired = false;
         let currentScrollPosition = document.documentElement.scrollTop || document.body.scrollTop;
 
@@ -21404,6 +21378,9 @@ declare global {
             scriptNode.parent().append(scriptNode);
         }
 
+        if (settingsRaw.activeTargetsUI && $("#active_targets-wrapper").length === 0) {
+            buildActiveTargetsUI();
+        }
         if (settingsRaw.showSettings && $("#script_settings").length === 0) {
             buildScriptSettings();
         }
@@ -21809,7 +21786,7 @@ declare global {
 
     // main.js -> Soldier Healing
     function getHealingRate() {
-        let hc = 
+        let hc =
           (game.global.race['orbit_decayed'] && game.global.race['truepath']) ? buildings.EnceladusBase.stateOnCount :
           game.global.race['artifical'] ? buildings.BootCamp.count :
           buildings.Hospital.count;
@@ -22199,6 +22176,68 @@ declare global {
         } else {
             return opt ?? 0;
         }
+    }
+
+    function importSettings(str) {
+        //let saveState = JSON.parse(LZString.decompressFromBase64(str));
+        let saveState = JSON.parse(str);
+        if (!saveState && typeof saveState === "object" && (saveState.scriptName === "TMVictor" || $.isEmptyObject(saveState))) {
+            return false;
+        }
+        let evals = [];
+        Object.values(saveState.overrides ?? []).forEach(list => list.forEach(override => {
+            if (override.type1 === "Eval") {
+                evals.push(override.arg1);
+            }
+            if (override.type2 === "Eval") {
+                evals.push(override.arg2);
+            }
+        }));
+        saveState.triggers?.forEach(trigger => {
+            if (trigger.requirementType === "Eval") {
+                evals.push(trigger.requirementId);
+            }
+        });
+        Object.values(saveState.overrides?.log_prestige_format ?? []).forEach(prestige_log_format_override => {
+            if (prestige_log_format_override.ret.includes("{eval:")) {
+                evals.push(prestige_log_format_override.ret);
+            }
+        });
+
+        if (saveState.log_prestige_format?.includes("{eval:")) {
+            evals.push(saveState.log_prestige_format);
+        }
+
+        if (evals.length > 0 && !confirm("Warning! Imported settings includes evaluated code, which will have full access to browser page, and can be potentially dangerous.\nOnly continue if you trust the source. Injected code:\n" + evals.join("\n"))) {
+            return false;
+        }
+        console.log("Importing script settings");
+        settingsRaw = saveState;
+        updateStandAloneSettings();
+        updateStateFromSettings();
+        updateSettingsFromState();
+        removeScriptSettings();
+        removeMechInfo();
+        removeStorageToggles();
+        removeMarketToggles();
+        removeArpaToggles();
+        removeCraftToggles();
+        removeBuildingToggles();
+        removeEjectToggles();
+        removeSupplyToggles();
+        $('#autoScriptContainer').remove();
+        updateUI();
+        buildFilterRegExp();
+
+        GameLog.logInfo("special", "Settings successfully imported");
+
+        return true;
+    }
+
+    function exportSettings() {
+        console.log("Exporting script settings");
+        // return LZString.compressToBase64(JSON.stringify(global));
+        return JSON.stringify(settingsRaw);
     }
 
     var poly = {

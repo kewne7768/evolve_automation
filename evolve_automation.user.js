@@ -8038,12 +8038,19 @@
         }
         // Migrate pre-overrides settings
         settingsRaw.triggers.forEach(t => {
+            // Normalize manually-added boolean triggers to match UI
+            if (t.requirementType == "Boolean" && t.requirementCount !== 1) {
+                t.requirementId = t.requirementCount ? t.requirementId : !t.requirementId;
+                t.requirementCount = 1;
+            }
+            // Migrate old trigger IDs
             if ((t.requirementType === "unlocked" || t.requirementType === "researched") && techIds["tech-" + t.requirementId]) {
                 t.requirementId = "tech-" + t.requirementId;
             }
             if (t.actionType === "research" && techIds["tech-" + t.actionId]) {
                 t.actionId = "tech-" + t.actionId;
             }
+            // Migrate old trigger checks to overrides
             if (t.requirementType === "unlocked") {
                 t.requirementType = "ResearchUnlocked";
                 t.requirementCount = 1;
@@ -19585,9 +19592,9 @@
         $('#autoScriptContainer').remove();
         updateUI();
         buildFilterRegExp();
-        
+
         GameLog.logInfo("special", "Settings successfully imported");
-        
+
         return true;
     }
 

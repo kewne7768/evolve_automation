@@ -1559,7 +1559,7 @@
             return game.races[this.id].type;
         }
 
-        getWeighting() {
+        getWeighting(verbose) {
             // Locked races always have zero weighting
             let habitability = this.getHabitability();
             if (habitability < (settings.evolutionAutoUnbound ? 0.8 : 1)) {
@@ -1579,12 +1579,17 @@
             const goodImitates = ["dracnid", "octigoran", "unicorn", "salamander", "cyclops", "kamel", "arraak", "troll", "custom"];
             const noImitates = ["junker", "nano", "synth"]; // Can't run Valdi, can't imitate synthetic except custom
 
+            let goals = [];
             let weighting = 0;
             let starLevel = getStarLevel(settings);
             const checkAchievement = (baseWeight, id) => {
-                weighting += baseWeight * Math.max(0, starLevel - getAchievementStar(id));
-                if (game.global.race.universe !== "micro" && game.global.race.universe !== "standard") {
-                    weighting += baseWeight * Math.max(0, starLevel - getAchievementStar(id, "standard"));
+                let improve = starLevel - getAchievementStar(id);
+                if (improve > 0) {
+                    weighting += baseWeight * improve;
+                    goals.push(`achieve_${id}_name`);
+                    if (game.global.race.universe !== "micro" && game.global.race.universe !== "standard") {
+                        weighting += baseWeight * Math.max(0, starLevel - getAchievementStar(id, "standard"));
+                    }
                 }
             }
 
@@ -1595,12 +1600,17 @@
                 let canUpgrade = speciesPillarLevel && speciesPillarLevel < starLevel;
                 if (canPillar || canUpgrade) {
                     weighting += 1000 * Math.max(0, starLevel - speciesPillarLevel);
+                    goals.push("feat_equilibrium_name");
                     // Check genus pillar for Enlightenment
                     if (!noGenusRace.includes(this.id)) {
                         let genusPillar = Math.max(...Object.values(races)
                           .filter(r => r.genus === this.genus && !noGenusRace.includes(r.id))
                           .map(r => (game.global.pillars[r.id] ?? 0)));
-                        weighting += 10000 * Math.max(0, starLevel - genusPillar);
+                        let improve = starLevel - genusPillar;
+                        if (improve > 0) {
+                            weighting += 10000 * improve;
+                            goals.push("achieve_enlightenment_name");
+                        }
                     }
                 }
             }
@@ -1610,6 +1620,7 @@
                 let imitateUnlocked = game.global.stats?.synth?.[this.id] ?? false;
                 if (!noImitates.includes(this.id) && !imitateUnlocked) {
                     weighting += 10000;
+                    goals.push("evo_imitate");
                     if (goodImitates.includes(this.id)) {
                         weighting += ((goodImitates.length - 1) - goodImitates.indexOf(this.id)) * 5000;
                     }
@@ -1680,7 +1691,11 @@
             // Feats, lowest weight - go for them only if there's nothing better
             if (game.global.race.universe !== "micro") {
                 const checkFeat = (id) => {
-                    weighting += 1 * Math.max(0, starLevel - (game.global.stats.feat[id] ?? 0));
+                    let improve = starLevel - (game.global.stats.feat[id] ?? 0);
+                    if (improve > 0) {
+                        weighting += 1 * improve;
+                        goals.push(`feat_${id}_name`);
+                    }
                 }
 
                 // Take no advice, Ill Advised
@@ -1743,7 +1758,7 @@
             // Scale down weight of unsuited races
             weighting *= habitability;
 
-            return weighting;
+            return verbose ? goals : weighting;
         }
 
         getHabitability() {
@@ -13195,6 +13210,15 @@
                     needReset = true;
                     break;
                 }
+            }
+        }
+
+        if (!needReset && settings.autoEvolution && settings.userEvolutionTarget === "auto") {
+            let goals = races[game.global.race.species].getWeighting(true);
+            if (goals.length > 0) {
+                GameLog.logInfo("special", `Auto Achievement goes for: ${goals.map(s => game.loc(s)).join(", ")}.`, ['progress', 'achievements']);
+            } else {
+                GameLog.logInfo("special", `Auto Achievement can't pick a goal for this run.`, ['progress', 'achievements']);
             }
         }
 

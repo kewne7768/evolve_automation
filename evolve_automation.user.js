@@ -15972,11 +15972,11 @@
             updateRaceWarning();
         });
 
+        let genusOptions = [...Object.values(game.races).map(r => r.type).filter((g, i, a) => g && g !== "organism" && a.indexOf(g) === i).map(g => ({val: g, label: game.loc(`genelab_genus_${g}`)}))];
+        addSettingsSelect(currentNode, "userEvolutionGenus", "Preferred genus", "Chosen genus will be picked if target race have such option. Works only with challenge races, and hybrids. If chosen genus is not allowed, then first valid option will be picked instead.", genusOptions);
+
         currentNode.append(`<div><span id="script_race_warning"></span></div>`);
         updateRaceWarning();
-
-        let genusOptions = [...Object.values(game.races).map(r => r.type).filter((g, i, a) => g && g !== "organism" && a.indexOf(g) === i).map(g => ({val: g, label: game.loc(`genelab_genus_${g}`)}))];
-        addSettingsSelect(currentNode, "userEvolutionGenus", "Preferred genus", "Chosen genus will be picked if target race have such option. Works only with challenge races, and hybrids. If chosen genus is not allowed, then first valid option will be picked instead..", genusOptions);
 
         addSettingsToggle(currentNode, "evolutionAutoUnbound", "Allow unbound races", "Allow Auto Achievement to pick biome restricted races on unsuited biomes, after getting unbound.");
         addSettingsToggle(currentNode, "evolutionBackup", "Soft Reset", "Perform soft resets until you'll get chosen race. Has no effect after getting mass extinction perk.");

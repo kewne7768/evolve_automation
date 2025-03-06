@@ -1573,7 +1573,7 @@
             return game.races[this.id].type;
         }
 
-        getWeighting() {
+        getWeighting(verbose) {
             // Locked races always have zero weighting
             let habitability = this.getHabitability();
             if (habitability < (settings.evolutionAutoUnbound ? 0.8 : 1)) {
@@ -1593,12 +1593,17 @@
             const goodImitates = ["dracnid", "octigoran", "unicorn", "salamander", "cyclops", "kamel", "arraak", "troll", "custom"];
             const noImitates = ["junker", "nano", "synth"]; // Can't run Valdi, can't imitate synthetic except custom
 
+            let goals = [];
             let weighting = 0;
             let starLevel = getStarLevel(settings);
             const checkAchievement = (baseWeight, id) => {
-                weighting += baseWeight * Math.max(0, starLevel - getAchievementStar(id));
-                if (game.global.race.universe !== "micro" && game.global.race.universe !== "standard") {
-                    weighting += baseWeight * Math.max(0, starLevel - getAchievementStar(id, "standard"));
+                let improve = starLevel - getAchievementStar(id);
+                if (improve > 0) {
+                    weighting += baseWeight * improve;
+                    goals.push(`achieve_${id}_name`);
+                    if (game.global.race.universe !== "micro" && game.global.race.universe !== "standard") {
+                        weighting += baseWeight * Math.max(0, starLevel - getAchievementStar(id, "standard"));
+                    }
                 }
             }
 
@@ -1609,12 +1614,17 @@
                 let canUpgrade = speciesPillarLevel && speciesPillarLevel < starLevel;
                 if (canPillar || canUpgrade) {
                     weighting += 1000 * Math.max(0, starLevel - speciesPillarLevel);
+                    goals.push("feat_equilibrium_name");
                     // Check genus pillar for Enlightenment
                     if (!noGenusRace.includes(this.id)) {
                         let genusPillar = Math.max(...Object.values(races)
                           .filter(r => r.genus === this.genus && !noGenusRace.includes(r.id))
                           .map(r => (game.global.pillars[r.id] ?? 0)));
-                        weighting += 10000 * Math.max(0, starLevel - genusPillar);
+                        let improve = starLevel - genusPillar;
+                        if (improve > 0) {
+                            weighting += 10000 * improve;
+                            goals.push("achieve_enlightenment_name");
+                        }
                     }
                 }
             }
@@ -1624,6 +1634,7 @@
                 let imitateUnlocked = game.global.stats?.synth?.[this.id] ?? false;
                 if (!noImitates.includes(this.id) && !imitateUnlocked) {
                     weighting += 10000;
+                    goals.push("evo_imitate");
                     if (goodImitates.includes(this.id)) {
                         weighting += ((goodImitates.length - 1) - goodImitates.indexOf(this.id)) * 5000;
                     }
@@ -1694,7 +1705,11 @@
             // Feats, lowest weight - go for them only if there's nothing better
             if (game.global.race.universe !== "micro") {
                 const checkFeat = (id) => {
-                    weighting += 1 * Math.max(0, starLevel - (game.global.stats.feat[id] ?? 0));
+                    let improve = starLevel - (game.global.stats.feat[id] ?? 0);
+                    if (improve > 0) {
+                        weighting += 1 * improve;
+                        goals.push(`feat_${id}_name`);
+                    }
                 }
 
                 // Take no advice, Ill Advised
@@ -1757,7 +1772,7 @@
             // Scale down weight of unsuited races
             weighting *= habitability;
 
-            return weighting;
+            return verbose ? goals : weighting;
         }
 
         getHabitability() {
@@ -2189,7 +2204,7 @@
         [{id:"fasting", trait:"fasting"}],
     ];
     const governors = ["soldier", "criminal", "entrepreneur", "educator", "spiritual", "bluecollar", "noble", "media", "sports", "bureaucrat"];
-    const evolutionSettingsToStore = ["userEvolutionTarget", "prestigeType", ...challenges.map(c => "challenge_" + c[0].id)];
+    const evolutionSettingsToStore = ["userEvolutionTarget", "userEvolutionGenus", "prestigeType", ...challenges.map(c => "challenge_" + c[0].id)];
     const logIgnore = ["food", "lumber", "stone", "chrysotile", "slaughter", "s_alter", "slave_market", "horseshoe", "assembly", "cloning_facility", "ambush_patrol", "raid_supplies", "siege_fortress"];
     const galaxyRegions = ["gxy_stargate", "gxy_gateway", "gxy_gorddon", "gxy_alien1", "gxy_alien2", "gxy_chthonian"];
     const settingsSections = ["toggle", "general", "prestige", "evolution", "research", "market", "storage", "production", "war", "hell", "fleet", "job", "building", "project", "government", "logging", "trait", "weighting", "ejector", "planet", "mech", "magic", "trigger", "snippet"];
@@ -8299,13 +8314,17 @@ declare global {
             races[id] = new Race(id);
             let evolutionPath;
             if (id === "junker" || id === "sludge" || id === "ultra_sludge") {
-                evolutionPath = genusEvolution.fungi; // Use fungi as default Valdi genus
+                for (let genus of Object.keys(genusEvolution)) {
+                    races[id].evolutionTree[genus] = [e.bunker, e[id], ...(genusEvolution[genus] ?? [])];
+                }
             } else if (game.races[id].type === "hybrid") {
-                evolutionPath = genusEvolution[game.races[id].hybrid[0]];
+                let hybridGenus = game.races[id].hybrid;
+                races[id].evolutionTree[hybridGenus[0]] = [e.bunker, e[id], ...(genusEvolution[hybridGenus[0]] ?? [])];
+                races[id].evolutionTree[hybridGenus[1]] = [e.bunker, e[id], ...(genusEvolution[hybridGenus[1]] ?? [])];
             } else {
-                evolutionPath = genusEvolution[races[id].genus];
+                races[id].evolutionTree[races[id].genus] = [e.bunker, e[id], ...(genusEvolution[races[id].genus] ?? [])];
             }
-            races[id].evolutionTree = [e.bunker, e[id], ...(evolutionPath ?? [])];
+
 
             // add imitate races
             imitations[id] = new EvolutionAction(`s-${id}`);
@@ -8882,6 +8901,7 @@ declare global {
             userUniverseTargetName: "none",
             userPlanetTargetName: "none",
             userEvolutionTarget: "auto",
+            userEvolutionGenus: "fungi",
             evolutionQueue: [],
             evolutionQueueEnabled: false,
             evolutionQueueRepeat: false,
@@ -9891,8 +9911,11 @@ declare global {
         let maxRNA = 0;
         let maxDNA = 0;
 
-        for (let i = 0; i < state.evolutionTarget.evolutionTree.length; i++) {
-            let evolution = state.evolutionTarget.evolutionTree[i];
+        let evolutionTree = state.evolutionTarget.evolutionTree[settings.userEvolutionGenus] ??
+                            state.evolutionTarget.evolutionTree[Object.keys(state.evolutionTarget.evolutionTree)[0]];
+
+        for (let i = 0; i < evolutionTree.length; i++) {
+            let evolution = evolutionTree[i];
             let costs = poly.adjustCosts(evolution.definition);
 
             maxRNA = Math.max(maxRNA, Number(costs["RNA"]?.() ?? 0));
@@ -9915,8 +9938,8 @@ declare global {
         resources.DNA.currentQuantity = resources.DNA.currentQuantity + DNAForEvolution;
 
         // Lets go for our targeted evolution
-        for (let i = 0; i < state.evolutionTarget.evolutionTree.length; i++) {
-            let action = state.evolutionTarget.evolutionTree[i];
+        for (let i = 0; i < evolutionTree.length; i++) {
+            let action = evolutionTree[i];
             if (action.isUnlocked()) {
                 // Don't click challenges which already active
                 let challenge = challenges.flat().find(c => c.id === action.id);
@@ -15080,6 +15103,15 @@ declare global {
             }
         }
 
+        if (!needReset && settings.autoEvolution && settings.userEvolutionTarget === "auto") {
+            let goals = races[game.global.race.species].getWeighting(true);
+            if (goals.length > 0) {
+                GameLog.logInfo("special", `Auto Achievement goes for: ${goals.map(s => game.loc(s)).join(", ")}.`, ['progress', 'achievements']);
+            } else {
+                GameLog.logInfo("special", `Auto Achievement can't pick a goal for this run.`, ['progress', 'achievements']);
+            }
+        }
+
         if (needReset) {
             // Let's double check it's actually *soft* reset
             let resetButton = document.querySelector(".reset .button:not(.right)");
@@ -18070,6 +18102,9 @@ declare global {
             updateRaceWarning();
         });
 
+        let genusOptions = [...Object.values(game.races).map(r => r.type).filter((g, i, a) => g && g !== "organism" && a.indexOf(g) === i).map(g => ({val: g, label: game.loc(`genelab_genus_${g}`)}))];
+        addSettingsSelect(currentNode, "userEvolutionGenus", "Preferred genus", "Chosen genus will be picked if target race have such option. Works only with challenge races, and hybrids. If chosen genus is not allowed, then first valid option will be picked instead.", genusOptions);
+
         currentNode.append(`<div><span id="script_race_warning"></span></div>`);
         updateRaceWarning();
 
@@ -18134,6 +18169,9 @@ declare global {
 
     function buildEvolutionQueueItem(id) {
         let queuedEvolution = settingsRaw.evolutionQueue[id];
+        for (let settingName of evolutionSettingsToStore) {
+            queuedEvolution[settingName] = queuedEvolution[settingName] ?? settings[settingName];
+        }
 
         let raceName = "";
         let raceClass = "";
@@ -18161,13 +18199,15 @@ declare global {
             raceName = "Valdi and Sludge can not be combined!";
             raceClass = "has-text-danger";
         } else if (uniqPicked === 1) {
-            raceName = `${isValdi ? races.junker.name : races.sludge.name}, `;
+            let name = isValdi ? races.junker.name :
+                       isSludge ? races.sludge.name :
+                       isUltraSludge ? races.ultra_sludge.name : "???";
             if (race && race !== races.junker && race !== races.sludge && race !== races.ultra_sludge) {
-                raceName += game.loc(`genelab_genus_${race.genus}`);
+                raceName = name + ", " + game.loc(`genelab_genus_${race.genus}`);
                 raceClass = getRaceColor(race);
             } else {
-                raceName += game.loc(`genelab_genus_fungi`);
-                raceClass = getRaceColor(races.shroomi);
+                raceName = name + ", " + game.loc(`genelab_genus_${queuedEvolution.userEvolutionGenus}`);
+                raceClass = getRaceColor(Object.values(races).find(r => r.genus === queuedEvolution.userEvolutionGenus));
             }
         } else if (queuedEvolution.userEvolutionTarget === "auto") {
             raceName = "Auto Achievements";
@@ -18175,6 +18215,13 @@ declare global {
         } else if (race) {
             raceName = race.name;
             raceClass = getRaceColor(race);
+            if (race.genus == "hybrid") {
+                if (game.races[race.id].hybrid.includes(queuedEvolution.userEvolutionGenus)) {
+                    raceName += ", " + game.loc(`genelab_genus_${queuedEvolution.userEvolutionGenus}`);
+                } else {
+                    raceName += ", " + game.loc(`genelab_genus_${game.races[race.id].hybrid[0]}`);
+                }
+            }
         } else {
             raceName = "Unrecognized race!";
             raceClass = "has-text-danger";
@@ -18227,8 +18274,7 @@ declare global {
 
     function addEvolutionSetting() {
         let queuedEvolution = {};
-        for (let i = 0; i < evolutionSettingsToStore.length; i++){
-            let settingName = evolutionSettingsToStore[i];
+        for (let settingName of evolutionSettingsToStore) {
             let settingValue = settingsRaw[settingName];
             queuedEvolution[settingName] = settingValue;
         }

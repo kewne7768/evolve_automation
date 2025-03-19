@@ -1541,7 +1541,7 @@
     class Race {
         constructor(id) {
             this.id = id;
-            this.evolutionTree = [];
+            this.evolutionTree = {};
         }
 
         get name() {
@@ -19668,7 +19668,7 @@
         // export function hellSupression(area, val) from portal.js
         hellSupression: function(t,e){switch(t){case"ruins":{let t=e||buildings.RuinsGuardPost.stateOnCount,r=75*buildings.RuinsArcology.stateOnCount,a=game.armyRating(t*traitVal('high_pop', 0, 1),"hellArmy",0);a*=traitVal('holy', 1, '+');let l=(a+r)/5e3;return{supress:l>1?1:l,rating:a+r}}case"gate":{let t=poly.hellSupression("ruins",e),r=100*buildings.GateTurret.stateOnCount;r*=traitVal('holy', 1, '+');let a=(t.rating+r)/7500;return{supress:a>1?1:a,rating:t.rating+r}}default:return 0}},
         // function taxCap(min) from civics.js
-        taxCap: function(e){let a=(haveTech("currency",5)||game.global.race.terrifying)&&!game.global.race.noble;if(e)return a?0:traitVal("noble",0,10);{let e=traitVal("noble",1,30);return a&&(e+=20),"oligarchy"===game.global.civic.govern.type&&(e+=("bureaucrat"===getGovernor()?25:20)),"noble"===getGovernor()&&(e+=20),e}},
+        taxCap: function(e){let a=(haveTech("currency",5)||game.global.race.terrifying)&&!game.global.race.noble;if(e)return a?0:traitVal("noble",0,10);{let e=traitVal("noble",1,30);return a&&(e+=20),"oligarchy"===game.global.civic.govern.type&&(e+=("bureaucrat"===getGovernor()?25:20)),"noble"===getGovernor()&&(e+=20),(game.global.race['wish'] && game.global.race['wishStats'])&&(e+=game.global.race.wishStats.tax),e}},
         // export function mechCost(size,infernal) from portal.js
         mechCost: function(e,a,x){let l=9999,r=1e7;switch(e){case"small":{let e=(x??game.global.blood.prepared)>=2?5e4:75e3;r=a?2.5*e:e,l=a?20:1}break;case"medium":r=a?45e4:18e4,l=a?100:4;break;case"large":r=a?925e3:375e3,l=a?500:20;break;case"titan":r=a?15e5:75e4,l=a?1500:75;break;case"collector":{let e=(x??game.global.blood.prepared)>=2?8e3:1e4;r=a?2.5*e:e,l=1}}return{s:l,c:r}},
         // function terrainRating(mech,rating,effects) from portal.js

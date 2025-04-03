@@ -6430,7 +6430,7 @@
             // Otherwise, it ends up attributed to this script itself, which is not ideal and hard to debug.
             // How well it works may depend on browser settings too.
             let fnName = `[Snippet] ${snip.title}`;
-            let executable = `(function(trigger, stopRunning, ui, settings) {
+            let executable = `(function(trigger, isEvolving, stopRunning, ui, settings) {
                 const resourceList = (list) => list;
                 const checkTypesDynamic = checkTypes;
                 const snippetState = {};
@@ -6445,6 +6445,7 @@
             executable += "\n//" + "# " + "sourceURL=snippet." + encodeURI(snip.title) + ".js\n";
             let fn = ((eval(executable)).apply(null, [
                 this.#makeTriggerFn(snip), // trigger() function. Pass an action and it will be triggered for one tick. You don't have to think about state.
+                this.isEvolvingFn, // isEvolving() function; doesn't take parameters so it's shared between all snippets.
                 this.#makeStopRunningFn(snip), // stopRunning() function. Stops running the snippet until its changed or the page is reloaded. Use for one-off script mod snippets.
                 this.#makeUi(snip), // ui object. See below.
                 this.#makeSettingsProxy(snip), // Proxy for "settings". Applies overrides in the right processing stage, even if the snippet runs late.
@@ -6493,6 +6494,10 @@
                 return !(Object.keys(triggerable).some((rn) => resources[rn].currentQuantity < triggerable[rn]));
             }
             return fn;
+        }
+
+        static isEvolvingFn() {
+            return state.goal === "Evolution";
         }
 
         static #makeStopRunningFn(snip) {
@@ -6787,10 +6792,17 @@ declare global {
     };
 
     /**
+     * Check whether the evolution phase has finished and all challenges for the current run have been applied.
+     * The evolution phase also includes universe and planet selection.
+     */
+    function isEvolving(): boolean;
+    /**
      * Stops running your snippet until the page is reloaded.
      * Useful if you can determine it's not needed anymore (patched everything, wrong challenges, etc).
      * This is preferred to once() if both solutions would work.
      * Note changes to your snippet can result in the snippet becoming active again.
+     * The snippet will also always start running again one additional time after evolution is finished;
+     * this provides better consistency with full page game reloads caused by specific traits.
      */
     function stopRunning(): void;
     /**
@@ -20829,16 +20841,20 @@ declare global {
 // if (buildings.RedZiggurat.count < 20) trigger(buildings.RedZiggurat);
 //
 // Special functions available include:
-// Triggers. These don't block each other for resources.
+// Triggers:
+// These don't block each other for resources.
 // * trigger(buildings.RedZiggurat). Can be used to trigger buildings. Put in just the buildings. bit and press ctrl+space for autocomplete.
 // * trigger(techIds["tech-scarletite"]). Can be used to trigger technology. Put in just the "tech-" bit and press ctrl+space for autocomplete.
 // * trigger(projects.SuperCollider). Can be used to trigger ARPAs. Put in just the projects. bit and press ctrl+space for autocomplete.
 // * trigger(resourceList({Mythril: 1e5, Bolognium: 1e5})). Creates a custom trigger, demanding the resources and preventing them from being spent. Can be used to force crafting. An array can be passed as second argument, listing buildings allowed to spend those materials.
-// Helpers.
+//
+// Helpers:
 // * once(() => { console.log("Hello!"); }); . Runs a function only once, unless the snippet is reset. The return value is cached and immediately returned after.
 // * daily(() => { console.log("Today's a day, today's a new day"); }); . Runs a function every in-game day. The return value is cached and immediately returned until a new day passes. Doesn't run during evolution.
+// * isEvolving(). Returns a boolean if still in the evolution phase; can be used to avoid taking certain decisions before challenges are set up.
 // * return stopRunning(); . Stops running your snippet. Note that snippets will be given a "second chance" after evolution.
-// UI.
+//
+// UI:
 // Your snippet can have basic settings (toggles, numbers and strings only). These can have user overrides applied to them, too.
 // Autocomplete on the ui. object for more info.
 // Eval functions.

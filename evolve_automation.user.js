@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.142
+// @version      3.3.1.143
 // @description  try to take over the world!
 // @downloadURL  https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.user.js
 // @updateURL    https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.meta.js
@@ -8439,8 +8439,8 @@ declare global {
 
         priorityList.push(buildings.AlphaMission);
         priorityList.push(buildings.AlphaStarport);
-        priorityList.push(buildings.AlphaFusion);
         priorityList.push(buildings.AlphaHabitat);
+        priorityList.push(buildings.AlphaFusion);
         priorityList.push(buildings.AlphaLuxuryCondo);
         priorityList.push(buildings.AlphaMiningDroid);
         priorityList.push(buildings.AlphaProcessing);
@@ -13183,6 +13183,7 @@ declare global {
 
         // Calculate the available power / resource rates of change that we have to work with
         let availablePower = resources.Power.currentQuantity;
+        let missingProducer = {};
 
         for (let i = 0; i < buildingList.length; i++) {
             let building = buildingList[i];
@@ -13197,6 +13198,10 @@ declare global {
                     resources.Belt_Support.rateOfChange -= resources.Belt_Support.maxQuantity;
                 } else {
                     resourceType.resource.rateOfChange += building.getFuelRate(j) * building.stateOnCount;
+                }
+
+                if (resourceType.resource instanceof Support && resourceType.rate < 0) {
+                    missingProducer[resourceType.resource.id] = (missingProducer[resourceType.resource.id] ?? 0) + 1;
                 }
             }
         }
@@ -13580,6 +13585,14 @@ declare global {
                     }
 
                     maxStateOn = Math.min(maxStateOn, supportedAmount);
+
+                    if (missingProducer[resourceType.resource.id]) {
+                        building.extraDescription = `Make sure all ${resourceType.resource.title} producers are above consumers in buildings list!<br>${building.extraDescription}`;
+                    }
+                } else {
+                    if (missingProducer[resourceType.resource.id] && resourceType.rate < 0) {
+                        missingProducer[resourceType.resource.id] -= 1;
+                    }
                 }
             }
 

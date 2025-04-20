@@ -4539,7 +4539,8 @@
 
     var GovernmentManager = {
         Types: {
-            anarchy: {id: "anarchy", isUnlocked: () => false}, // Special - should not be shown to player
+            anarchy: {id: "anarchy", isUnlocked: () => false, selectable: false},
+            dictator: {id: "dictator", isUnlocked: () => false, selectable: false},
             autocracy: {id: "autocracy", isUnlocked: () => true},
             democracy: {id: "democracy", isUnlocked: () => true},
             oligarchy: {id: "oligarchy", isUnlocked: () => true},
@@ -18060,7 +18061,7 @@ declare global {
         addSettingsNumber(currentNode, "generalMinimumMorale", "Minimum allowed morale", "Use this to set a minimum allowed morale. Remember that less than 100% can cause riots and weather can cause sudden swings");
         addSettingsNumber(currentNode, "generalMaximumMorale", "Maximum allowed morale", "Use this to set a maximum allowed morale. The tax rate will be raised to lower morale to this maximum");
 
-        let governmentOptions = [{val: "none", label: "None", hint: "Do not select government"}, ...Object.keys(GovernmentManager.Types).filter(id => id !== "anarchy").map(id => ({val: id, label: game.loc(`govern_${id}`), hint: game.loc(`govern_${id}_desc`)}))];
+        let governmentOptions = [{val: "none", label: "None", hint: "Do not select government"}, ...Object.values(GovernmentManager.Types).filter(g => g.selectable !== false).map(g => ({val: g.id, label: game.loc(`govern_${g.id}`), hint: game.loc(`govern_${g.id}_desc`)}))];
         addSettingsSelect(currentNode, "govInterim", "Interim Government", "Temporary low tier government until you research other governments", governmentOptions);
         addSettingsSelect(currentNode, "govFinal", "Second Government", "Second government choice, chosen once becomes available. Can be the same as above", governmentOptions);
         addSettingsSelect(currentNode, "govSpace", "Space Government", "Government for bioseed+. Chosen once you researched Quantum Manufacturing. Can be the same as above", governmentOptions);

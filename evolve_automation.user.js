@@ -1620,7 +1620,7 @@
                 let imitateUnlocked = game.global.stats?.synth?.[this.id] ?? false;
                 if (!noImitates.includes(this.id) && !imitateUnlocked) {
                     weighting += 10000;
-                    goals.push("evo_imitate");
+                    goals.push("feat_planned_obsolescence_name");
                     if (goodImitates.includes(this.id)) {
                         weighting += ((goodImitates.length - 1) - goodImitates.indexOf(this.id)) * 5000;
                     }
@@ -2171,8 +2171,8 @@
         [{id:"orbit_decay", trait:"orbit_decay"}],
         //[{id:"nonstandard", trait:"nonstandard"}],
         [{id:"gravity_well", trait:"gravity_well"},
-         {id:"witch_hunter", trait:"witch_hunter"}],
-        //[{id:"warlord", trait:"warlord"}],
+         {id:"witch_hunter", trait:"witch_hunter"},
+         {id:"warlord", trait:"warlord"}],
         //[{id:"storage_wars", trait:"storage_wars"}],
         [{id:"junker", trait:"junker"}],
         [{id:"cataclysm", trait:"cataclysm"}],
@@ -11440,7 +11440,7 @@
                         maxStateOn--;
                     }
                 }
-            } else if (building.powered > 0) {
+            } else if (building.powered > 0 && building !== buildings.RuinsHellForge) {
                 maxStateOn = Math.min(maxStateOn, availablePower / building.powered);
             }
 

@@ -16513,7 +16513,7 @@ declare global {
             .ea-craft-toggle {
                 max-width:75px;
                 margin-top:4px;
-                float:right;
+                position:absolute;
                 left:50%;
             }
 
@@ -21524,11 +21524,12 @@ declare global {
             let craftableElement = $('#res' + craftable.id + ' h3');
             if (craftableElement.length) {
                 let settingKey = "craft" + craftable.id;
-                craftableElement.prepend(addToggleCallbacks($(`
+                craftableElement.parent().css('position', 'relative');
+                addToggleCallbacks($(`
                   <label tabindex="0" class="switch ea-craft-toggle">
                     <input class="script_${settingKey}" type="checkbox"${settingsRaw[settingKey] ? " checked" : ""}/>
                     <span class="check" style="height:5px;"></span>
-                  </label>`), settingKey));
+                  </label>`), settingKey).insertAfter(craftableElement);
             }
         }
     }

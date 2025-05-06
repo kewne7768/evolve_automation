@@ -15934,7 +15934,7 @@ declare global {
         let createCustom = document.querySelector("#celestialLab .create button");
         if (createCustom) {
             updateOverrides(); // Game doesn't tick in lab. Update settings here.
-            if (settings.masterScriptToggle && settings.autoPrestige && (settings.prestigeType === "ascension" || settings.prestigeType === "terraform")) {
+            if (settings.masterScriptToggle && settings.autoPrestige && ["ascension", "terraform", "apotheosis"].includes(settings.prestigeType)) {
                 state.goal = "GameOverMan";
                 createCustom.click();
                 return;

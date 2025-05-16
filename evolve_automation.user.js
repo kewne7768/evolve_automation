@@ -3457,7 +3457,7 @@
           () => "Solar System building",
           () => settings.buildingWeightingSolar
       ],[
-          () => settings.buildingSpecialAssembly && game.global.race['artifical'],
+          () => settings.buildingSpecialAssembly && game.global.race['artifical'] && !game.global.race['parasite'],
           (building) => (assemblyBuildings.includes(building)),
           () => "Using special multi-build mode",
           () => 1 // Pop assembly is crucial to progress, let normal weightings work too in case resources are short
@@ -13008,8 +13008,9 @@ declare global {
         const isRealisticNumber = (num) => Number.isFinite(num) && num <= (Number.MAX_SAFE_INTEGER - 1);
 
         // Special multi-build for population assembly buildings
+        // Parasite makes this irrelevant and potentially harmful as the game doesn't handle multiple clicks very well.
         const autoBuildSpecialPopulation = () => {
-            if (settings.buildingSpecialAssembly && game.global.race['artifical'] && resources.Population.storageRatio < 1) {
+            if (settings.buildingSpecialAssembly && game.global.race['artifical'] && !game.global.race['parasite'] && resources.Population.storageRatio < 1) {
                 if (!isRealisticNumber(resources.Population.currentQuantity) || !isRealisticNumber(resources.Population.maxQuantity)) {
                     return;
                 }

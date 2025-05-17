@@ -2768,6 +2768,27 @@
         BadlandsPredatorDrone: new Action("Badlands Predator Drone", "portal", "war_drone", "prtl_badlands"),
         BadlandsSensorDrone: new Action("Badlands Sensor Drone", "portal", "sensor_drone", "prtl_badlands"),
         BadlandsAttractor: new Action("Badlands Attractor Beacon", "portal", "attractor", "prtl_badlands", {smart: true}),
+        BadlandsMinions: new Action("Badlands Minions Lair (Warlord)", "portal", "minions", "prtl_badlands"),
+        BadlandsReaper: new Action("Badlands Soul Reaper (Warlord)", "portal", "reaper", "prtl_badlands"),
+        BadlandsCorpsePile: new Action("Badlands Corpse Pile (Warlord)", "portal", "corpse_pile", "prtl_badlands"),
+        BadlandsMortuary: new Action("Badlands Mortuary (Warlord)", "portal", "mortuary", "prtl_badlands"),
+        BadlandsCodex: new Action("Badlands Create Codex (Warlord)", "portal", "codex", "prtl_badlands"),
+        
+        WastelandThrone: new Action("Wasteland Throne of Evil (Warlord)", "portal", "throne", "prtl_wasteland"),
+        WastelandIncinerator: new Action("Wasteland Incinerator (Warlord)", "portal", "incinerator", "prtl_wasteland"),
+        WastelandWarehouse: new Action("Wasteland Warehouse (Warlord)", "portal", "warehouse", "prtl_wasteland"),
+        WastelandHovel: new Action("Wasteland Hellspawn Hovel (Warlord)", "portal", "hovel", "prtl_wasteland", {housing: true}),
+        WastelandHellCasino: new Action("Wasteland Den of Sin (Warlord)", "portal", "hell_casino", "prtl_wasteland"),
+        WastelandTwistedLab: new Action("Wasteland Twisted Lab (Warlord)", "portal", "twisted_lab", "prtl_wasteland", {knowledge: true}),
+        WastelandDemonForge: new Action("Wasteland Demon Forge (Warlord)", "portal", "demon_forge", "prtl_wasteland"),
+        WastelandHellFactory: new Action("Wasteland Terror Factory (Warlord)", "portal", "hell_factory", "prtl_wasteland"),
+        WastelandPumpjack: new Action("Wasteland Hellish Pumpjack (Warlord)", "portal", "pumpjack", "prtl_wasteland"),
+        WastelandDigDemon: new Action("Wasteland Dig Demon Burrow (Warlord)", "portal", "dig_demon", "prtl_wasteland"),
+        WastelandTunneler: new Action("Wasteland Tunneler Demon (Warlord)", "portal", "tunneler", "prtl_wasteland"),
+        WastelandBrute: new Action("Wasteland Brute Hut (Warlord)", "portal", "brute", "prtl_wasteland", {garrison: true}),
+        WastelandAltar: new Action("Wasteland Sacrificial Altar (Warlord)", "portal", "s_alter", "prtl_wasteland"),
+        WastelandShrine: new Action("Wasteland Shrine (Warlord)", "portal", "shrine", "prtl_wasteland"),
+        WastelandMeditationChamber: new Action("Wasteland Meditation Chamber (Warlord)", "portal", "meditation", "prtl_wasteland"),
 
         PitMission: new Action("Pit Mission", "portal", "pit_mission", "prtl_pit"),
         PitAssaultForge: new Action("Pit Assault Forge", "portal", "assault_forge", "prtl_pit"),
@@ -2776,10 +2797,13 @@
         PitSoulAttractor: new Action("Pit Soul Attractor", "portal", "soul_attractor", "prtl_pit"),
         PitSoulCapacitor: new Action("Pit Soul Capacitor (Witch Hunting)", "portal", "soul_capacitor", "prtl_pit"),
         PitAbsorptionChamber: new Action("Pit Absorption Chamber (Witch Hunting)", "portal", "absorption_chamber", "prtl_pit"),
+        PitShadowMine: new Action("Pit Shadow Mine (Warlord)", "portal", "shadow_mine", "prtl_pit"),
+        PitTavern: new Action("Pit Tavern (Warlord)", "portal", "tavern", "prtl_pit"),
 
         RuinsMission: new Action("Ruins Mission", "portal", "ruins_mission", "prtl_ruins"),
         RuinsGuardPost: new Action("Ruins Guard Post", "portal", "guard_post", "prtl_ruins", {smart: true}),
         RuinsVault: new Action("Ruins Vault", "portal", "vault", "prtl_ruins"),
+        RuinsWarVault: new Action("Ruins Vault (Warlord)", "portal", "war_vault", "prtl_ruins"),
         RuinsArchaeology: new Action("Ruins Archaeology", "portal", "archaeology", "prtl_ruins"),
         RuinsArcology: new Action("Ruins Arcology", "portal", "arcology", "prtl_ruins"),
         RuinsHellForge: new Action("Ruins Infernal Forge", "portal", "hell_forge", "prtl_ruins"),
@@ -2815,6 +2839,7 @@
         SpireTower: new Action("Spire Tower", "portal", "spire", "prtl_spire"),
         SpireWaygate: new Action("Spire Waygate", "portal", "waygate", "prtl_spire", {smart: true}),
         SpireEdenicGate: new Action("Spire Edenic Gate", "portal", "edenic_gate", "prtl_spire"),
+        SpireBazaar: new Action("Spire Bazaar (Warlord)", "portal", "bazaar", "prtl_spire"),
 
         AsphodelMission: new Action("Asphodel Mission", "eden", "survery_meadows", "eden_asphodel"),
         AsphodelEncampment: new Action("Asphodel Encampment", "eden", "encampment", "eden_asphodel"),
@@ -3088,10 +3113,10 @@
           () => "Can not exceed amount of Warehouses",
           () => 0
       ],[
-          () => haveTech("hell_spire", 8),
+          () => haveTech("hell_spire", 8) || game.global.race['warlord'],
           (building) => building === buildings.SpireSphinx,
           () => "",
-          () => 0 // Sphinx not usable after solving
+          () => 0 // Sphinx not usable after solving / Harmachis not usable during Warlord
       ],[
           () => game.global.race['artifical'] && haveTech("focus_cure", 7),
           (building) => building instanceof ResourceAction && building.resource === resources.Population && building !== buildings.TauCloning,
@@ -4041,7 +4066,7 @@
         }, [ResourceProductionCost]), (f) => f.id, [{s: "smelter_fuel_p_", p: "priority"}]),
 
         initIndustry() {
-            if (game.global.race['steelen'] || (buildings.Smelter.count < 1 && !game.global.race['cataclysm'] && !game.global.race['orbit_decayed'] && !haveTech("isolation"))) {
+            if (game.global.race['steelen'] || (buildings.Smelter.count < 1 && !game.global.race['cataclysm'] && !game.global.race['orbit_decayed'] && !haveTech("isolation") && !game.global.race['warlord'])) {
                 return false;
             }
 
@@ -4196,7 +4221,8 @@
             let max = buildings.Factory.stateOnCount
                     + buildings.RedFactory.stateOnCount
                     + buildings.AlphaMegaFactory.stateOnCount * 2
-                    + buildings.TauFactory.stateOnCount * (haveTech("isolation") ? 5 : 3);
+                    + buildings.TauFactory.stateOnCount * (haveTech("isolation") ? 5 : 3)
+                    + buildings.WastelandHellFactory.stateOnCount * (3 + (game.global.portal?.hell_factory?.rank || 1));
             if (!game.global.city.factory) {
                 return max;
             }
@@ -4352,7 +4378,9 @@
         },
 
         initIndustry() {
-            this._graphPlant = game.global.race['truepath'] ? buildings.TitanGraphene : buildings.AlphaGraphenePlant;
+            this._graphPlant = game.global.race['warlord'] ? buildings.WastelandTwistedLab
+            : game.global.race['truepath'] ? buildings.TitanGraphene
+            : buildings.AlphaGraphenePlant;
             if ((this._graphPlant.instance?.count ?? 0) < 1) {
                 return false;
             }
@@ -5038,16 +5066,19 @@
                 }
             }
 
-            // Reserve soldiers operating forge
-            if (buildings.PitSoulForge.stateOnCount > 0 && soldierRating  > 0) {
-                // export function soulForgeSoldiers() from portal.js
-                soldiers = Math.round(650 / soldierRating);
-                if (game.global.portal.gun_emplacement) {
-                    soldiers -= game.global.portal.gun_emplacement.on * (game.global.tech.hell_gun >= 2 ? 2 : 1);
-                    if (soldiers < 0){
-                        soldiers = 0;
-                    }
+            // Reserve soldiers operating forge - check if it exists and could be powered, not if it's already powered
+            if (buildings.PitSoulForge.count > 0 && (buildings.PitSoulForge.autoStateEnabled || buildings.PitSoulForge.stateOnCount > 0) && soldierRating > 0) {
+                // Calculate number of soldiers needed for Soul Forge
+                let base = game.global.race['warlord'] ? 400 : 650;
+             let soulForgeSoldiers = Math.round(base / soldierRating);
+        
+                // Adjust for gun emplacements
+                if (buildings.PitGunEmplacement.count > 0) {
+                    soulForgeSoldiers -= Math.floor(buildings.PitGunEmplacement.stateOnCount * 1.5);
+                    soulForgeSoldiers = Math.max(1, soulForgeSoldiers);
                 }
+
+                soldiers += soulForgeSoldiers;
             }
 
             // Guardposts need at least one soldier free so lets just always keep one handy
@@ -6420,6 +6451,9 @@
         buildings.SiriusGravityDome.gameMax = 100;
         buildings.SiriusAscensionMachine.gameMax = 100;
         buildings.SiriusAscensionTrigger.gameMax = 1;
+        buildings.WastelandThrone.gameMax = 0; // TODO should probably be 1 or 2 with smart logic, 2 to toggle skill assignment mode and 3 to disable it? and then 1 after all skills assigned while a commander is captured
+        buildings.RuinsWarVault.gameMax = 2;
+        buildings.BadlandsCodex.gameMax = 0; // TODO script just needs to know what it costs, for now it just tries to spam it
         buildings.PitSoulForge.gameMax = 1;
         buildings.PitSoulCapacitor.gameMax = 40;
         buildings.PitAbsorptionChamber.gameMax = 100;
@@ -6678,6 +6712,7 @@
         buildings.ProximaOrichalcumSphere.overridePowered = -8;
         buildings.ProximaElysaniteSphere.overridePowered = -18;
         buildings.BlackholeStellarEngine.overridePowered = 0;
+        buildings.WastelandIncinerator.overridePowered = -25;
         // Numbers aren't exactly correct. That's fine - it won't mess with calculations - it's not something we can turn off and on. We just need to know that they *are* power generators, for autobuild, and that's enough for us.
         // We don't handle the Stellar Engine at at all, it will be treated as mystery power in autoPower
     }
@@ -6974,18 +7009,42 @@
         priorityList.push(buildings.BadlandsPredatorDrone);
         priorityList.push(buildings.BadlandsAttractor);
         priorityList.push(buildings.PortalCarport);
+        priorityList.push(buildings.BadlandsMinions);
+        priorityList.push(buildings.BadlandsReaper);
+        priorityList.push(buildings.BadlandsCorpsePile);
+        priorityList.push(buildings.BadlandsMortuary);
+        priorityList.push(buildings.BadlandsCodex);
         priorityList.push(buildings.PitGunEmplacement);
         priorityList.push(buildings.PitSoulAttractor);
         priorityList.push(buildings.PitSoulCapacitor);
         priorityList.push(buildings.PitAbsorptionChamber);
+        priorityList.push(buildings.PitShadowMine);
+        priorityList.push(buildings.PitTavern);
         priorityList.push(buildings.PortalRepairDroid);
         priorityList.push(buildings.PitMission);
         priorityList.push(buildings.PitAssaultForge);
         priorityList.push(buildings.RuinsAncientPillars);
 
+        priorityList.push(buildings.WastelandThrone);
+        priorityList.push(buildings.WastelandIncinerator);
+        priorityList.push(buildings.WastelandWarehouse);
+        priorityList.push(buildings.WastelandHovel);
+        priorityList.push(buildings.WastelandHellCasino);
+        priorityList.push(buildings.WastelandTwistedLab);
+        priorityList.push(buildings.WastelandDemonForge);
+        priorityList.push(buildings.WastelandHellFactory);
+        priorityList.push(buildings.WastelandPumpjack);
+        priorityList.push(buildings.WastelandDigDemon);
+        priorityList.push(buildings.WastelandTunneler);
+        priorityList.push(buildings.WastelandBrute);
+        priorityList.push(buildings.WastelandAltar);
+        priorityList.push(buildings.WastelandShrine);
+        priorityList.push(buildings.WastelandMeditationChamber);
+
         priorityList.push(buildings.RuinsMission);
         priorityList.push(buildings.RuinsGuardPost);
         priorityList.push(buildings.RuinsVault);
+        priorityList.push(buildings.RuinsWarVault);
         priorityList.push(buildings.RuinsArchaeology);
 
         priorityList.push(buildings.GateMission);
@@ -7015,6 +7074,7 @@
         priorityList.push(buildings.SpireSurveyTower);
         priorityList.push(buildings.SpireWaygate);
         priorityList.push(buildings.SpireEdenicGate);
+        priorityList.push(buildings.SpireBazaar);
 
         priorityList.push(buildings.AsphodelMission);
         priorityList.push(buildings.AsphodelEncampment);
@@ -8892,6 +8952,14 @@
             return;
         }
 
+        if (game.global.race['warlord']) {
+
+            //if (minionCount >= settings.warMinions) {
+            //    attackEnemyFortress();
+            //}
+            return;
+        }
+
         // Determine Patrol size and count
         let targetHellSoldiers = 0;
         let targetHellPatrols = 0;
@@ -9306,7 +9374,9 @@
                         }
                         jobsToAssign = Math.min(jobsToAssign, jobMax[j]);
                     }
-                    if (job === jobs.Miner) {
+                    if (job === jobs.Miner && game.global.race['warlord']) {
+                        jobsToAssign = jobs.Miner.max;
+                    } else if (job === jobs.Miner) {
                         if (jobMax[j] === undefined) {
                             jobMax[j] = 0;
                             if (!minersDisabled) {
@@ -12724,7 +12794,7 @@
 
     function autoMech() {
         let m = MechManager;
-        if (!m.initLab() || $(`#mechList .mechRow[draggable=true]`).length > 0) {
+        if (game.global.race['warlord'] || !m.initLab() || $(`#mechList .mechRow[draggable=true]`).length > 0) {
             return;
         }
         let mechBay = game.global.portal.mechbay;

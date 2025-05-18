@@ -14355,6 +14355,7 @@ declare global {
                                   - ((1 - m.syndicate(a, false, true)) * m.getWeighting(a)));
 
                 if (regionsToProtect.length < 1) {
+                    m.nextShipRegion = null;
                     m.updateNextShip();
                     m.nextShipMsg = `No more ships currently needed`;
                     return;

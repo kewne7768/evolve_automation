@@ -14355,7 +14355,6 @@ declare global {
                                   - ((1 - m.syndicate(a, false, true)) * m.getWeighting(a)));
 
                 if (regionsToProtect.length < 1) {
-                    m.nextShipRegion = null;
                     m.updateNextShip();
                     m.nextShipMsg = `No more ships currently needed`;
                     return;
@@ -14366,14 +14365,11 @@ declare global {
             if (settings.fleetOuterShips === "user") {
                 newShip = m.avail(yard.blueprint) ? yard.blueprint : null;
             }
-            else {
-                if (m.avail(scout) && m.shipCount(targetRegion, scoutToFind) < m.getMaxScouts(targetRegion)) {
+            else if (m.avail(scout) && m.shipCount(targetRegion, scoutToFind) < m.getMaxScouts(targetRegion))
                     newShip = scout;
-                }
-                if (!newShip) {
+            else if (m.syndicate(targetRegion, false, true) < m.getMaxDefense(targetRegion)) {
                     let fighter =  m.getFighterBlueprint();
                     newShip = m.avail(fighter) ? fighter : null;
-                }
             }
         }
 

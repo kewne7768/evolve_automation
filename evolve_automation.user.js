@@ -892,7 +892,7 @@
                 (this._tab === "eden" && !game.global.settings.showEden)) {
                 return false;
             }
-            return document.getElementById(this._vueBinding) !== null;
+            return this.vue !== undefined;
         }
 
         isSwitchable() {
@@ -3177,7 +3177,7 @@
       ],[
           () => game.global.race['cannibalize'],
           (building) => {
-              if (building === buildings.SacrificialAltar && building.count > 0) {
+              if (building._id === "s_alter" && building.count > 0) {
                   if (resources.Population.currentQuantity < 1) {
                       return "Too low population";
                   }

@@ -2040,6 +2040,10 @@
         }
 
         canGain() {
+            if (game.global.race.species === "hellspawn" && game.global.race['warlord']) {
+                return false;
+            }
+
             return this.gainEnabled && !this.purgeEnabled && this.canMutate("gain")
               && game.global.race[this.traitName] === undefined
               && !conflictingTraits.some((set) => (set[0] === this.traitName && game.global.race[set[1]] !== undefined)
@@ -6454,7 +6458,7 @@
         buildings.SiriusAscensionMachine.gameMax = 100;
         buildings.SiriusAscensionTrigger.gameMax = 1;
         buildings.WastelandThrone.gameMax = 0; // TODO should probably be 1 or 2 with smart logic, 2 to toggle skill assignment mode and 3 to disable it? and then 1 after all skills assigned while a commander is captured
-        buildings.RuinsWarVault.gameMax = 2;
+        buildings.RuinsWarVault.gameMax = 1;
         buildings.BadlandsCodex.gameMax = 0; // TODO script just needs to know what it costs, for now it just tries to spam it
         buildings.PitSoulForge.gameMax = 1;
         buildings.PitSoulCapacitor.gameMax = 40;
@@ -6788,8 +6792,14 @@
         priorityList.push(buildings.TauFusionGenerator);
         priorityList.push(buildings.TauGas2AlienSpaceStation);
 
+        priorityList.push(buildings.WastelandIncinerator);
+
         priorityList.push(buildings.RuinsHellForge);
         priorityList.push(buildings.RuinsInfernoPower);
+
+        priorityList.push(buildings.AsphodelEncampment);
+        priorityList.push(buildings.AsphodelRectory);
+        priorityList.push(buildings.AsphodelSoulEngine);
 
         priorityList.push(buildings.TitanElectrolysis);
         priorityList.push(buildings.TitanHydrogen);
@@ -7028,7 +7038,6 @@
         priorityList.push(buildings.RuinsAncientPillars);
 
         priorityList.push(buildings.WastelandThrone);
-        priorityList.push(buildings.WastelandIncinerator);
         priorityList.push(buildings.WastelandWarehouse);
         priorityList.push(buildings.WastelandHovel);
         priorityList.push(buildings.WastelandHellCasino);
@@ -7079,9 +7088,6 @@
         priorityList.push(buildings.SpireBazaar);
 
         priorityList.push(buildings.AsphodelMission);
-        priorityList.push(buildings.AsphodelEncampment);
-        priorityList.push(buildings.AsphodelRectory);
-        priorityList.push(buildings.AsphodelSoulEngine);
         priorityList.push(buildings.AsphodelMechStation);
         priorityList.push(buildings.AsphodelHarvester);
         priorityList.push(buildings.AsphodelProcessor);
@@ -19559,7 +19565,7 @@
     }
 
     function isEarlyGame() {
-        if (game.global.race['cataclysm'] || game.global.race['orbit_decayed'] || game.global.race['lone_survivor']) {
+        if (game.global.race['cataclysm'] || game.global.race['orbit_decayed'] || game.global.race['lone_survivor'] || game.global.race['warlord']) {
             return false;
         } else if (game.global.race['truepath'] || game.global.race['sludge'] || game.global.race['ultra_sludge']) {
             return !haveTech("high_tech", 7);

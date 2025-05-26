@@ -18777,16 +18777,6 @@
         document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;
     }
 
-    function createQuickOptions(node, optionsElementId, optionsDisplayName, buildOptionsFunction) {
-        let optionsDiv = $(`<div style="cursor: pointer;" id="${optionsElementId}">${optionsDisplayName} Options</div>`);
-        node.append(optionsDiv);
-
-        addOptionUI(optionsElementId + "_btn", `#${optionsElementId}`, optionsDisplayName, buildOptionsFunction);
-        optionsDiv.on('click', function() {
-            openOptionsModal(optionsDisplayName, buildOptionsFunction);
-        });
-    }
-
     function createSettingToggle(node, settingKey, title, enabledCallBack, disabledCallBack) {
         let toggle = $(`
           <label class="switch script_bg_${settingKey}" tabindex="0" title="${title}">
@@ -18891,29 +18881,55 @@
     }
 
     function updatePrestigeInTopBar() {
+        const parentId = 's-prestige-type';
+        let parentNode = document.getElementById(parentId);
+
         if (settings.displayPrestigeTypeInTopBar) {
-            addPrestigeToTopBar();
+            if (parentNode === null) {
+                // Check for planetWrap parent node
+                const planetWrap = document.querySelector('.planetWrap');
+                if (planetWrap === null)
+                    return; // Return and try again later if it doesn't exist yet
+
+                // Create new parent node
+                parentNode = document.createElement('span');
+                parentNode.setAttribute('id', parentId);
+                parentNode.setAttribute('style', 'border-left: 1px solid; margin-left: 0.75rem; padding-left: 0.75rem;');
+
+                // Add to planetWrap
+                planetWrap.append(parentNode);
+
+                // Add helper button to open prestige options modal
+                addOptionUI('s-prestige-type-helper-btn', `#${parentId}`, 'Prestige', buildPrestigeSettings);
+            }
         }
         else {
             removePrestigeFromTopBar();
+            return; // Disable and return if displayPrestigeTypeInTopBar isn't enabled
         }
 
-        let prestigeNode = document.getElementById("s-prestige-type");
-        if (prestigeNode == null) { return; } // Element has not yet been added, cannot update
+        // Update if prestigeType changed
+        if (parentNode.getAttribute('data-prestige') !== settings.prestigeType) {
+            let infoNode = parentNode.querySelector('.info');
+            if (infoNode === null) {
+                // Create info node if needed
+                infoNode = document.createElement('span');
+                infoNode.setAttribute('class', 'info');
 
-        let prestige = prestigeTypes.find(prest => prest.val === settings.prestigeType);
-        prestigeNode.title = prestige.hint;
-        prestigeNode.textContent = prestige.label;
-    }
+                parentNode.append(infoNode);
+            }
 
-    function addPrestigeToTopBar() {
-        let nodeId = "s-prestige-type";
-        if (document.getElementById(nodeId) !== null) { return; } // We've already added the info to the top bar
+            let prestige = prestigeTypes.find(entry => entry.val === settings.prestigeType);
+            if (prestige === undefined) {
+                // Somehow failed to find prestige details, mock up an object from settings
+                prestige = {label: settings.prestigeType, hint: ""};
+            }
 
-        let planetWrapNode = $("#topBar .planetWrap");
-        if (planetWrapNode.length === 0) { return; } // The node that we want to add it to doesn't exist yet
-
-        planetWrapNode.append($(`<span id="s-prestige-type" style="border-left: 1px solid; margin-left: 1rem; padding-left: 1rem;" ></span>`));
+            // Update node with new prestige info
+            infoNode.title = prestige.hint;
+            infoNode.textContent = prestige.label;
+            parentNode.setAttribute('data-prestige', settings.prestigeType);
+        }
     }
 
     function removePrestigeFromTopBar() {
@@ -19031,8 +19047,6 @@
             createSettingToggle(togglesNode, 'autoSupply', 'Send excess resources to Spire. Normal resources sent when they close to storage cap, craftables - when above requirements. Takes priority over ejector.', createSupplyToggles, removeSupplyToggles);
             createSettingToggle(togglesNode, 'autoNanite', 'Consume resources to produce Nanite. Normal resources sent when they close to storage cap, craftables - when above requirements. Takes priority over supplies and ejector.');
             createSettingToggle(togglesNode, 'autoReplicator', 'Use excess power to replicate resources.');
-
-            createQuickOptions(togglesNode, "s-quick-prestige-options", "Prestige", buildPrestigeSettings);
 
             togglesNode.append('<a class="button is-dark is-small" id="bulk-sell"><span>Bulk Sell</span></a>');
             $("#bulk-sell").on('mouseup', function() {

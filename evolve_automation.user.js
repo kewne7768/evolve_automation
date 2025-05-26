@@ -5441,6 +5441,10 @@
                 this._fleetVue.build();
                 getVueById('shipReg0')?.setLoc(region, yard.ships.length);
             }
+            if (yard.blueprint.class === "explorer") {
+                // After building an explorer, class has to be reset, because otherwise no more ships would be able to build, since explorer removes most parts from the list and makes avail() fail for any non-explorer ship
+                this._fleetVue.setVal('class', 'corvette');
+            }
             return true;
         },
 

@@ -6159,7 +6159,7 @@
                     check = trigger.requirementId;
                     break;
                 default:
-                    check = `_("${trigger.requirementType}","${trigger.requirementId}")`;
+                    check = `_("${trigger.requirementType}",${JSON.stringify(trigger.requirementId)})`;
             }
 
             win.prompt("Eval of this condition:", check);
@@ -7361,7 +7361,7 @@
             buildingAlwaysClick: false,
             buildingClickPerTick: 50,
             activeTargetsUI: false,
-            displayPrestigeTypeInTopBar: false,
+            displayPrestigeTypeInTopBar: true,
             displayTotalDaysTypeInTopBar: false,
             scriptSettingsExportFilename: "evolve-script-settings.json",
             performanceHackAvoidDrawTech: false,
@@ -16632,7 +16632,7 @@
         let triggerElement = $('#script_trigger_' + trigger.seq).children().eq(6);
         triggerElement.empty().off("*");
 
-        let deleteTriggerButton = $('<a class="button is-dark is-small" style="width: 26px; height: 26px"><span>X</span></a>');
+        let deleteTriggerButton = $('<a class="button is-small" style="width: 26px; height: 26px"><span>X</span></a>');
         triggerElement.append(deleteTriggerButton);
         deleteTriggerButton.on('click', function() {
             TriggerManager.RemoveTrigger(trigger.seq);
@@ -16640,7 +16640,7 @@
             updateTriggerSettingsContent();
         });
 
-        let duplicateTriggerButton = $('<a class="button is-dark is-small" style="width: 26px; height: 26px"><span>&#9282;</span></a>');
+        let duplicateTriggerButton = $('<a class="button is-small" style="width: 26px; height: 26px"><span>&#9282;</span></a>');
         triggerElement.append(duplicateTriggerButton);
         duplicateTriggerButton.on('click', function() {
             TriggerManager.DuplicateTrigger(trigger.seq);
@@ -16648,7 +16648,7 @@
             updateTriggerSettingsContent();
         });
 
-        let evalizeTriggerButton = $('<a class="button is-dark is-small" style="width: 26px; height: 26px"><span>E</span></a>');
+        let evalizeTriggerButton = $('<a class="button is-small" style="width: 26px; height: 26px"><span>E</span></a>');
         triggerElement.append(evalizeTriggerButton);
         evalizeTriggerButton.on('click', function() {
             TriggerManager.EvalizeTrigger(trigger.seq);

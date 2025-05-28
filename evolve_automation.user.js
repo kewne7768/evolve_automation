@@ -5406,6 +5406,10 @@
             if (ship.class === "explorer" && (ship.weapon !== "railgun" || ship.sensor !== "quantum")) {
                 return false;
             }
+            if (yard.blueprint.class === "explorer" && ship.class !== "explorer") {
+                // After building an explorer, class has to be reset, because otherwise no more ships would be able to build, since explorer removes most parts from the list and makes avail() fail for any non-explorer ship
+                this._fleetVue.setVal('class', 'corvette');
+            }
             for (let [type, part] of Object.entries(ship)) {
                 if (type !== "name" && yard.blueprint[type] !== part && !(ship.class === "explorer" && (part === "weapon" || part === "sensor"))) {
                     if (!this._fleetVue.avail(type, this.ShipConfig[type].indexOf(part), part)) {

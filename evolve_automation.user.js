@@ -5539,7 +5539,7 @@
                     break;
             }
 
-            let piracy = game.global.space.syndicate[region];
+            let piracy = game.global.space.syndicate[region] * getPiracyMultiplier();
             let patrol = 0;
             let sensor = 0;
             if (game.global.space.shipyard?.hasOwnProperty('ships')){

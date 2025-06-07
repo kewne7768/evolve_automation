@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.144
+// @version      3.3.1.145
 // @description  try to take over the world!
 // @downloadURL  https://github.com/Vollch/Evolve-Automation/raw/master/evolve_automation.user.js
 // @updateURL    https://github.com/Vollch/Evolve-Automation/raw/master/evolve_automation.meta.js
@@ -1765,6 +1765,8 @@
 
         getHabitability() {
             switch (this.id) {
+                case "hellspawn":
+                    return (game.global.race.universe === 'evil' && game.global.stats.achieve['godslayer']?.e) ? 1 : 0;
                 case "junker":
                     return game.global.genes.challenge ? 1 : 0;
                 case "sludge":
@@ -1810,6 +1812,8 @@
 
         getCondition() {
             switch (this.id) {
+                case "hellspawn":
+                    return poly.loc('wiki_challenges_reqs_reset', [`${poly.loc("wiki_universe_evil")} ${poly.loc("wiki_resets_apotheosis")}`]);
                 case "junker":
                     return "Genetic Dead End unlocked.";
                 case "sludge":
@@ -6811,7 +6815,9 @@
 
             races[id] = new Race(id);
             let evolutionPath;
-            if (id === "junker" || id === "sludge" || id === "ultra_sludge") {
+            if (id === "hellspawn") {
+                races[id].evolutionTree[races[id].genus] = [e.bunker, e.warlord, ...(genusEvolution[races[id].genus] ?? [])];
+            } else if (id === "junker" || id === "sludge" || id === "ultra_sludge") {
                 for (let genus of Object.keys(genusEvolution)) {
                     races[id].evolutionTree[genus] = [e.bunker, e[id], ...(genusEvolution[genus] ?? [])];
                 }
@@ -8390,7 +8396,7 @@
             if (settings["challenge_" + challenges[i][0].id]) {
                 for (let j = 0; j < challenges[i].length; j++) {
                     let {id, trait} = challenges[i][j];
-                    if (game.global.race[trait] !== 1 && evolutions[id].click() && (id === "junker" || id === "sludge" || id === "ultra_sludge")) {
+                    if (game.global.race[trait] !== 1 && evolutions[id].click() && (id === "junker" || id === "sludge" || id === "ultra_sludge" || id === "hellspawn")) {
                         return; // Give game time to update state after activating junker
                     }
                 }
@@ -13340,7 +13346,7 @@
         let needReset = false;
         if (settings.autoEvolution && settings.evolutionBackup) {
             // Sludge and Valdi can't be evolved at random, only intentionally
-            if (game.global.race.species !== "junker" && game.global.race.species !== "sludge" && game.global.race.species !== "ultra_sludge") {
+            if (!["junker", "sludge", "ultra_sludge", "hellspawn"].includes(game.global.race.species)) {
                 if (settings.userEvolutionTarget === "auto") {
                     let newRace = races[game.global.race.species];
                     if (newRace.getWeighting() <= 0) {
@@ -16216,6 +16222,7 @@
         let isValdi = queuedEvolution.challenge_junker || race === races.junker;
         let isSludge = queuedEvolution.challenge_sludge || race === races.sludge;
         let isUltraSludge = queuedEvolution.challenge_ultra_sludge || race === races.ultra_sludge;
+        let isHellspawn = queuedEvolution.challenge_warlord || race === races.hellspawn;
 
         const getRaceColor = (race) => {
             let suited = race.getHabitability();
@@ -16228,14 +16235,15 @@
             }
         };
 
-        let uniqPicked = isValdi + isSludge + isUltraSludge;
+        let uniqPicked = isValdi + isSludge + isUltraSludge + isHellspawn;
         if (uniqPicked > 1) {
-            raceName = "Valdi and Sludge can not be combined!";
+            raceName = "Valdi, Sludge and Hellspawn can not be combined!";
             raceClass = "has-text-danger";
         } else if (uniqPicked === 1) {
             let name = isValdi ? races.junker.name :
                        isSludge ? races.sludge.name :
-                       isUltraSludge ? races.ultra_sludge.name : "???";
+                       isUltraSludge ? races.ultra_sludge.name :
+                       isHellspawn ? races.hellspawn.name : "???";
             if (race && race !== races.junker && race !== races.sludge && race !== races.ultra_sludge) {
                 raceName = name + ", " + game.loc(`genelab_genus_${race.genus}`);
                 raceClass = getRaceColor(race);

@@ -8396,7 +8396,7 @@
             if (settings["challenge_" + challenges[i][0].id]) {
                 for (let j = 0; j < challenges[i].length; j++) {
                     let {id, trait} = challenges[i][j];
-                    if (game.global.race[trait] !== 1 && evolutions[id].click() && (id === "junker" || id === "sludge" || id === "ultra_sludge" || id === "hellspawn")) {
+                    if (game.global.race[trait] !== 1 && evolutions[id].click() && (id === "junker" || id === "sludge" || id === "ultra_sludge" || id === "warlord")) {
                         return; // Give game time to update state after activating junker
                     }
                 }

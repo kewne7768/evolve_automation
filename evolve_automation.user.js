@@ -15870,6 +15870,9 @@ declare global {
             || (obj === buildings.EnceladusBase && game.global.race['orbit_decayed'])) {
             notes.push(`~${getNiceNumber(getHealingRate())} soldiers healed per day`);
         }
+        if (obj === buildings.BootCamp) {
+            notes.push(`~${getNiceNumber(100 / ((game.global.civic.garrison?.rate ?? 0.625) * 4))} seconds to train a soldier`);
+        }
         if (obj === buildings.Hospital) {
             let growth = 1 / (getGrowthRate() * 4); // Fast loop, 4 times per second
             notes.push(`~${getNiceNumber(growth)} seconds to increase population`);

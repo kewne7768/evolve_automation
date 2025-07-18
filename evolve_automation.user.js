@@ -1610,9 +1610,15 @@
             }
 
             // Check pillar
-            if ((settings.prestigeType === "ascension" && settings.prestigeAscensionPillar) || settings.prestigeType === "demonic") {
+            if (
+                (
+                    (settings.prestigeType === "ascension" && settings.prestigeAscensionPillar) ||
+                    settings.prestigeType === "demonic"
+                ) &&
+                game.global.race.universe !== 'micro'
+            ) {
                 let speciesPillarLevel = game.global.pillars[this.id] ?? 0;
-                let canPillar = !speciesPillarLevel && resources.Harmony.currentQuantity >= 1 && game.global.race.universe !== 'micro';
+                let canPillar = !speciesPillarLevel && resources.Harmony.currentQuantity >= 1;
                 let canUpgrade = speciesPillarLevel && speciesPillarLevel < starLevel;
                 if (canPillar || canUpgrade) {
                     weighting += 1000 * Math.max(0, starLevel - speciesPillarLevel);

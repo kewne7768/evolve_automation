@@ -6573,13 +6573,8 @@
                     SnippetManager.activeTriggers.push(triggerable);
                 }
                 else if (typeof triggerable === "object") {
-                    // Custom resource list
-                    SnippetManager.customResourceDemands.push({
-                        name: snip.title,
-                        cause: "Snippet",
-                        cost: triggerable,
-                        allowedConflicts: allowedActions,
-                    });
+                    // Custom resource list legacy API support, before .custom() was split out. No return value here.
+                    fn.custom(triggerable, allowedActions);
                 }
             };
             // trigger() but only if we have less than "amount" count.
@@ -6592,7 +6587,12 @@
             // trigger() but only supports custom lists.
             // Returns a boolean true if all costs in the list are currently satisfied.
             fn.custom = (triggerable, allowedActions) => {
-                // Custom resource list
+                // Custom resource list. Passing invalid resources can cause problems elsewhere in script and should be the result of invalid user code.
+                Object.keys(triggerable).forEach(rn => {
+                    if (typeof resources[rn] === "undefined") {
+                        throw new Error(`Invalid resource key '${rn}' passed to trigger.custom().`);
+                    }
+                });
                 SnippetManager.customResourceDemands.push({
                     name: snip.title,
                     cause: "Snippet",

@@ -2465,6 +2465,14 @@
         Nanoweave: new CraftingJob("Nanoweave", "Nanoweave Crafter", resources.Nanoweave),
     }
 
+    // Flags are as follows:
+    // * housing: Marks a building as being useless if we have too much civilians.
+    // * garrison: Marks a building as increasing max soldier count. Only relevant for auto-MAD.
+    // * smart: Script has smart logic for building, config screen should show toggles.
+    // * important: Building is important enough that it can override resource conflicts for triggers.
+    // * noDownweight: When combined with .housing or .knowledge, don't downweight this building if it appears unnecessary.
+    // * multiSegmented: Script will attempt max-building, assuming the cost of each segment is identical.
+    // * random: Weighting will be randomized. Used for naming decisions.
     var buildings = {
         Food: new ResourceAction("Gather Food", "city", "food", "", "Food"),
         Lumber: new ResourceAction("Gather Lumber", "city", "lumber", "", "Lumber"),
@@ -2481,7 +2489,7 @@
         Smokehouse: new Action("Smokehouse", "city", "smokehouse", ""),
         SoulWell: new Action("Soul Well", "city", "soul_well", ""),
         SlavePen: new Action("Slave Pen", "city", "slave_pen", ""),
-        Transmitter: new Action("Transmitter", "city", "transmitter", "", {housing: true}),
+        Transmitter: new Action("Transmitter", "city", "transmitter", "", {housing: true, noDownweight: true}),
         CaptiveHousing: new Action("Captive Housing", "city", "captive_housing", ""),
         Farm: new Action("Farm", "city", "farm", "", {housing: true}),
         CompostHeap: new Action("Compost Heap", "city", "compost", ""),
@@ -2523,7 +2531,7 @@
         Banquet: new Action("Banquet Hall", "city", "banquet", ""),
         University: new Action("University", "city", "university", "", {knowledge: true}),
         Library: new Action("Library", "city", "library", "", {knowledge: true}),
-        Wardenclyffe: new Action("Wardenclyffe", "city", "wardenclyffe", "", {knowledge: true}),
+        Wardenclyffe: new Action("Wardenclyffe", "city", "wardenclyffe", "", {knowledge: true, noDownweight: true}),
         BioLab: new Action("Bioscience Lab", "city", "biolab", "", {knowledge: true}),
         CoalPower: new Action("Coal Powerplant", "city", "coal_power", ""),
         OilPower: new Action("Oil Powerplant", "city", "oil_power", ""),
@@ -2550,7 +2558,7 @@
         RedAtmoTerraformer: new Action("Red Terraformer (Orbit Decay, Complete)", "space", "atmo_terraformer", "spc_red"),
         RedTerraform: new Action("Red Terraform (Orbit Decay)", "space", "terraform", "spc_red", {prestige: true}),
         RedAssembly: new ResourceAction("Red Assembly (Cataclysm)", "space", "assembly", "spc_red", "Population", {housing: true, important: true}),
-        RedLivingQuarters: new Action("Red Living Quarters", "space", "living_quarters", "spc_red", {housing: true}),
+        RedLivingQuarters: new Action("Red Living Quarters", "space", "living_quarters", "spc_red", {housing: true, noDownweight: true}),
         RedPylon: new Action("Red Pylon (Cataclysm)", "space", "pylon", "spc_red"),
         RedVrCenter: new Action("Red VR Center", "space", "vr_center", "spc_red"),
         RedGarage: new Action("Red Garage", "space", "garage", "spc_red"),
@@ -2560,7 +2568,7 @@
         RedNaniteFactory: new CityAction("Red Nanite Factory (Cataclysm)", "space", "nanite_factory", "spc_red"),
         RedBiodome: new Action("Red Biodome", "space", "biodome", "spc_red"),
         RedUniversity: new Action("Red University (Orbit Decay)", "space", "red_university", "spc_red", {knowledge: true}),
-        RedExoticLab: new Action("Red Exotic Materials Lab", "space", "exotic_lab", "spc_red", {knowledge: true}),
+        RedExoticLab: new Action("Red Exotic Materials Lab", "space", "exotic_lab", "spc_red", {knowledge: true, noDownweight: () => haveTech("ancient_deify", 2)}),
         RedZiggurat: new Action("Red Ziggurat", "space", "ziggurat", "spc_red"),
         RedSpaceBarracks: new Action("Red Marine Barracks", "space", "space_barracks", "spc_red", {garrison: true}),
         RedForgeHorseshoe: new ResourceAction("Red Horseshoe (Cataclysm)", "space", "horseshoe", "spc_red", "Horseshoe", {housing: true, garrison: true}),
@@ -2648,7 +2656,7 @@
         TauMission: new Action("Tau Mission", "tauceti", "home_mission", "tau_home"),
         TauDismantle: new Action("Tau Dismantle Ship", "tauceti", "dismantle", "tau_home"),
         TauOrbitalStation: new Action("Tau Orbital Station", "tauceti", "orbital_station", "tau_home"),
-        TauColony: new Action("Tau Colony", "tauceti", "colony", "tau_home", {housing: true, smart: true}),
+        TauColony: new Action("Tau Colony", "tauceti", "colony", "tau_home", {housing: true, noDownweight: true, smart: true}),
         TauHousing: new Action("Tau Housing", "tauceti", "tau_housing", "tau_home", {housing: true}),
         TauCaptiveHousing: new CityAction("Tau Captive Housing", "tauceti", "captive_housing", "tau_home"),
         TauPylon: new Action("Tau Pylon", "tauceti", "pylon", "tau_home"),
@@ -2718,7 +2726,7 @@
 
         AlphaMission: new Action("Alpha Centauri Mission", "interstellar", "alpha_mission", "int_alpha"),
         AlphaStarport: new Action("Alpha Starport", "interstellar", "starport", "int_alpha"),
-        AlphaHabitat: new Action("Alpha Habitat", "interstellar", "habitat", "int_alpha", {housing: true}),
+        AlphaHabitat: new Action("Alpha Habitat", "interstellar", "habitat", "int_alpha", {housing: true, noDownweight: true}),
         AlphaMiningDroid: new Action("Alpha Mining Droid", "interstellar", "mining_droid", "int_alpha"),
         AlphaProcessing: new Action("Alpha Processing Facility", "interstellar", "processing", "int_alpha"),
         AlphaFusion: new Action("Alpha Fusion Reactor", "interstellar", "fusion", "int_alpha"),
@@ -2785,7 +2793,7 @@
         StargateDefensePlatform: new Action("Stargate Defense Platform", "galaxy", "defense_platform", "gxy_stargate"),
 
         GorddonMission: new Action("Gorddon Mission", "galaxy", "gorddon_mission", "gxy_gorddon"),
-        GorddonEmbassy: new Action("Gorddon Embassy", "galaxy", "embassy", "gxy_gorddon", {housing: true}),
+        GorddonEmbassy: new Action("Gorddon Embassy", "galaxy", "embassy", "gxy_gorddon", {housing: true, noDownweight: true}),
         GorddonDormitory: new Action("Gorddon Dormitory", "galaxy", "dormitory", "gxy_gorddon", {housing: true}),
         GorddonSymposium: new Action("Gorddon Symposium", "galaxy", "symposium", "gxy_gorddon", {knowledge: true}),
         GorddonFreighter: new Action("Gorddon Freighter", "galaxy", "freighter", "gxy_gorddon", {ship: true}),
@@ -3451,7 +3459,7 @@
           () => settings.buildingWeightingUnderpowered
       ],[
           () => state.knowledgeRequiredByTechs <= resources.Knowledge.maxQuantity,
-          (building) => building.is.knowledge && building !== buildings.Wardenclyffe && (building !== buildings.StargateTelemetryBeacon || building.count > 0), // We want Wardenclyffe for morale; first beacon required for progress
+          (building) => building.is.knowledge && !building.is.noDownweight && (building !== buildings.StargateTelemetryBeacon || building.count > 0), // First beacon required for progress
           () => "No need for more knowledge",
           () => settings.buildingWeightingUselessKnowledge
       ],[
@@ -3501,7 +3509,7 @@
           () => settings.buildingWeightingNeedStorage
       ],[
           () => resources.Population.maxQuantity > 50 && resources.Population.storageRatio < 0.9,
-          (building) => building.is.housing && building !== buildings.Alien1Consulate && building !== buildings.Transmitter && !(building instanceof ResourceAction),
+          (building) => building.is.housing && !building.is.noDownweight && !(building instanceof ResourceAction),
           () => "No more houses needed",
           () => settings.buildingWeightingUselessHousing
       ],[

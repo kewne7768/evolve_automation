@@ -1604,7 +1604,7 @@
             const bestForMid = ["human", "cath", "capybara", "gnome", "cyclops", "gecko", "dracnid", "entish", "shroomi", "antid", "sharkin", "dryad", "salamander", "yeti", "kamel", "imp", "unicorn", "synth", "shoggoth"];
             const bestForHigh = ["human", "cath", "capybara", "gnome", "cyclops", "gecko", "dracnid", "entish", "shroomi", "scorpid", "sharkin", "dryad", "salamander", "wendigo", "kamel", "balorg", "unicorn", "nano", "ghast"];
 
-            // Imitates to prioritize if farming matrix
+            // Imitates to prioritize if farming TP3
             const goodImitates = ["wyvern", "dwarf", "dracnid", "octigoran", "unicorn", "salamander", "cyclops", "kamel", "arraak", "troll", "custom"];
             // Races who cannot enter TP or cannot unlock imitate even if they can, due to either challenge conflicts or special case in rewards
             const noImitates = ["junker", "nano", "synth", "hellspawn"];

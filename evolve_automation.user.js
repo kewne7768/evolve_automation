@@ -2503,7 +2503,7 @@
         Smokehouse: new Action("Smokehouse", "city", "smokehouse", ""),
         SoulWell: new Action("Soul Well", "city", "soul_well", ""),
         SlavePen: new Action("Slave Pen", "city", "slave_pen", ""),
-        Transmitter: new Action("Transmitter", "city", "transmitter", "", {housing: true}),
+        Transmitter: new Action("Transmitter", "city", "transmitter", "", {housing: true, noDownweight: true}),
         CaptiveHousing: new Action("Captive Housing", "city", "captive_housing", ""),
         Farm: new Action("Farm", "city", "farm", "", {housing: true}),
         CompostHeap: new Action("Compost Heap", "city", "compost", ""),

@@ -3404,7 +3404,7 @@
           () => settings.buildingWeightingNeedStorage
       ],[
           () => resources.Population.maxQuantity > 50 && resources.Population.storageRatio < 0.9,
-          (building) => building.is.housing && building !== buildings.Alien1Consulate && !(building instanceof ResourceAction),
+          (building) => building.is.housing && building !== buildings.Alien1Consulate && building !== buildings.Transmitter && !(building instanceof ResourceAction),
           () => "No more houses needed",
           () => settings.buildingWeightingUselessHousing
       ],[
@@ -14144,7 +14144,8 @@
         if (haveTask("tax")) {
             overrides["autoTax"] = false;
         }
-        overrides["tickRate"] = Math.min(240, Math.max(1, Math.round((overrides["tickRate"] ?? settingsRaw["tickRate"])*2))/2);
+        let rawTickRate = overrides["tickRate"] ?? settingsRaw["tickRate"];
+        overrides["tickRate"] = Math.min(240, Math.max(1, Math.round(rawTickRate*2))/2);
 
         // Apply overrides
         Object.assign(settings, settingsRaw, overrides);

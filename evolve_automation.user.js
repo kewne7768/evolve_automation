@@ -3264,14 +3264,30 @@
       ],[
           () => true,
           (building) => {
+              if (building === buildings.BlackholeStellarEngine) {
+                  // `stateOffCount` is missleading for powered multisegmented buildings. This rule shouldn't ever apply to Stellar Engine, just ignore it
+                  // TODO: Might be better to ignore all multisegmented buildings, or making `stateOffCount` return 0 for multisegmented buildings, but i'm not sure about possible side effects at the moment - that would work as a hot fix
+                  return false;
+              }
+              if ((building === buildings.BadlandsAttractor || building === buildings.SpireMechBay) && building.isSmartManaged()) {
+                  // Those things might be temporaly disabled by smart logic
+                  return false;
+              }
+              if (building === buildings.RuinsGuardPost && building.isSmartManaged() && !isHellSupressUseful()) {
+                  // Prebuild guard posts. Even if we don't need supression right now they will be useful soon enough
+                  if (building.count < Math.ceil(5000 / (game.armyRating(traitVal('high_pop', 0, 1), "hellArmy", 0) * traitVal('holy', 1, '+')))) {
+                      return false;
+                  }
+              }
+              let supplyIndex = building === buildings.SpirePort ? 1 : building === buildings.SpireBaseCamp ? 2 : -1;
+              if (supplyIndex > 0 && (buildings.SpireMechBay.isSmartManaged() || buildings.SpirePurifier.isSmartManaged())) {
+                  // Prebuild ports and base camps to their optimal ratios, they will be enabled when needed. Unless mech bay and purifiers both have their smarts disabled, which means it won't ever happen.
+                  if (building.count < getBestSupplyRatio(resources.Spire_Support.maxQuantity, buildings.SpirePort.autoMax, buildings.SpireBaseCamp.autoMax)[supplyIndex]) {
+                      return false;
+                  }
+              }
               if (building._tab !== "city" && building.stateOffCount > 0) {
-                  if (building === buildings.RuinsGuardPost && building.isSmartManaged() && !isHellSupressUseful()
-                    && building.count < Math.ceil(5000 / (game.armyRating(traitVal('high_pop', 0, 1), "hellArmy", 0) * traitVal('holy', 1, '+')))) { return false; }
-                  if (building === buildings.BadlandsAttractor && building.isSmartManaged()) { return false; }
-                  if (building === buildings.SpireMechBay && building.isSmartManaged()) { return false; }
-                  let supplyIndex = building === buildings.SpirePort ? 1 : building === buildings.SpireBaseCamp ? 2 : -1;
-                  if ((supplyIndex > 0 && (buildings.SpireMechBay.isSmartManaged() || buildings.SpirePurifier.isSmartManaged()))
-                    && (building.count < getBestSupplyRatio(resources.Spire_Support.maxQuantity, buildings.SpirePort.autoMax, buildings.SpireBaseCamp.autoMax)[supplyIndex])) { return false; }
+                  // This thing not from city, switchable, and some of them disabled. We dont't need more at the moment.
                   return true;
               }
           },

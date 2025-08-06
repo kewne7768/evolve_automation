@@ -15263,6 +15263,22 @@ declare global {
             state.conflictTargets.push({name: FleetManagerOuter.nextShipName, cause: "Ship", cost: FleetManagerOuter.nextShipCost});
         }
 
+        if (settings.autoSnippet) {
+            let triggerSave = settings.prioritizeSnippetTriggers.includes("save");
+            if (triggerSave) {
+                state.conflictTargets.push(
+                    ...SnippetManager.activeTriggers.map(trg => {
+                        return {
+                            name: "Snippet",
+                            cause: "Snippet",
+                            cost: trg.cost,
+                        };
+                    }),
+                    ...SnippetManager.customResourceDemands
+                );
+            }
+        }
+
         if (settings.autoTrigger) {
             TriggerManager.resetTargetTriggers();
             let triggerSave = settings.prioritizeTriggers.includes("save");
@@ -15277,16 +15293,6 @@ declare global {
                         state.conflictTargets.push({name: obj.title, cause: "Trigger", cost: settings.arpaDemandWhole && obj.fullRemainingCost ? obj.fullRemainingCost : obj.cost});
                     }
                 }
-            }
-        }
-
-        if (settings.autoSnippet) {
-            // This is kind of interwoven with real triggers, so we re-use the same setting
-            let triggerSave = settings.prioritizeSnippetTriggers.includes("save");
-            if (triggerSave) {
-                state.conflictTargets.push(...SnippetManager.activeTriggers.map(trg => {
-                    return {name: "Snippet", cause: "Snippet", cost: trg.cost};
-                }), ...SnippetManager.customResourceDemands);
             }
         }
 

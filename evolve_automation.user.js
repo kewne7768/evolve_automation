@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.145
+// @version      3.3.1.146
 // @description  try to take over the world!
 // @downloadURL  https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.user.js
 // @updateURL    https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.meta.js
@@ -15294,25 +15294,25 @@ declare global {
                     }
                 }
             }
-        }
 
-        // Fake trigger for Embassy
-        if (buildings.GorddonEmbassy.isAutoBuildable() && resources.Knowledge.maxQuantity >= settings.fleetEmbassyKnowledge) {
-            let obj = buildings.GorddonEmbassy;
-            state.triggerTargets.push(obj);
-            state.conflictTargets.push({name: obj.title, cause: "Knowledge", cost: obj.cost});
-        }
-        // Fake trigger for Eden
-        if (buildings.TauStarEden.isAutoBuildable() && isPrestigeAllowed("eden")) {
-            let obj = buildings.TauStarEden;
-            state.triggerTargets.push(obj);
-            state.conflictTargets.push({name: obj.title, cause: "Prestige", cost: obj.cost});
-        }
-        // Fake trigger for Ignition
-        if (buildings.TauGas2MatrioshkaBrain.count >= 1000 && buildings.TauGas2IgniteGasGiant.isAutoBuildable() && isPrestigeAllowed("retire")) {
-            let obj = buildings.TauGas2IgniteGasGiant;
-            state.triggerTargets.push(obj);
-            state.conflictTargets.push({name: obj.title, cause: "Prestige", cost: obj.cost});
+            // Fake trigger for Embassy
+            if (buildings.GorddonEmbassy.isAutoBuildable() && resources.Knowledge.maxQuantity >= settings.fleetEmbassyKnowledge) {
+                let obj = buildings.GorddonEmbassy;
+                state.triggerTargets.push(obj);
+                state.conflictTargets.push({name: obj.title, cause: "Knowledge", cost: obj.cost});
+            }
+            // Fake trigger for Eden
+            if (buildings.TauStarEden.isAutoBuildable() && isPrestigeAllowed("eden")) {
+                let obj = buildings.TauStarEden;
+                state.triggerTargets.push(obj);
+                state.conflictTargets.push({name: obj.title, cause: "Prestige", cost: obj.cost});
+            }
+            // Fake trigger for Ignition
+            if (buildings.TauGas2MatrioshkaBrain.count >= 1000 && buildings.TauGas2IgniteGasGiant.isAutoBuildable() && isPrestigeAllowed("retire")) {
+                let obj = buildings.TauGas2IgniteGasGiant;
+                state.triggerTargets.push(obj);
+                state.conflictTargets.push({name: obj.title, cause: "Prestige", cost: obj.cost});
+            }
         }
 
         $("#tech .action").each(function() {

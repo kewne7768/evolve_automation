@@ -1566,20 +1566,34 @@
                 return -1;
             }
 
+            // Races not allowed to execute MAD, invalid targets for MAD auto achievements even if there is nothing else to do
             const noMADRace = ["sludge", "ultra_sludge", "hellspawn"];
+            // Races that can't meaningfully contribute to genus pillar for Enlightenment, due to not-saved user chosen genus or otherwise
+            // (they do, however, have a per-race pillar!)
             const noPillarRace = ["custom", "junker", "sludge", "ultra_sludge", "hybrid", "hellspawn"];
+            // Genera that don't have a greatness achievement, and so should never get a weighting boost from missing greatness achievement
             const noGreatnessGenus = ["hybrid"];
+            // Races that can't execute any greatness reset, and so should never be used for greatness automation
             const noGreatnessRace = ["hellspawn"];
+            // Races that don't have an extinction achievement, invalid target for any extinction autoachievement
             const noExtinctionRace = ["hellspawn"];
+            // Challenges races get a huge penalty applied as they shouldn't be done automatically, unless there is nothing else to do
             const challengeRace = ["junker", "sludge", "ultra_sludge", "hellspawn"];
+
+            // List of resets that grant greatness
             const greatnessReset = ["bioseed", "ascension", "terraform", "matrix", "retire", "eden"];
+
+            // Subjectively chosen race lists that are known to perform well, slightly preferring them when multiple valid options are available for the same achievement
+            // "Mid" resets, "high" will likely also grant an Enlightenment tick
             const midTierReset = ["bioseed", "cataclysm", "whitehole", "vacuum", "terraform"];
             const highTierReset = ["ascension", "demonic", "apotheosis"];
             const bestForMid = ["human", "cath", "capybara", "gnome", "cyclops", "gecko", "dracnid", "entish", "shroomi", "antid", "sharkin", "dryad", "salamander", "yeti", "kamel", "imp", "unicorn", "synth", "shoggoth"];
             const bestForHigh = ["human", "cath", "capybara", "gnome", "cyclops", "gecko", "dracnid", "entish", "shroomi", "scorpid", "sharkin", "dryad", "salamander", "wendigo", "kamel", "balorg", "unicorn", "nano", "ghast"];
-            // Order and usefulness is very subjective but someone doing auto TP3 is probably going to unlock them all anyway
-            const goodImitates = ["dracnid", "octigoran", "unicorn", "salamander", "cyclops", "kamel", "arraak", "troll", "custom"];
-            const noImitates = ["junker", "nano", "synth"]; // Can't run Valdi, can't imitate synthetic except custom
+
+            // Imitates to prioritize if farming TP3
+            const goodImitates = ["wyvern", "dwarf", "dracnid", "octigoran", "unicorn", "salamander", "cyclops", "kamel", "arraak", "troll", "custom"];
+            // Races who cannot enter TP or cannot unlock imitate even if they can, due to either challenge conflicts or special case in rewards
+            const noImitates = ["junker", "nano", "synth", "hellspawn"];
 
             let goals = [];
             let weighting = 0;
@@ -1596,12 +1610,21 @@
             }
 
             // Check pillar
-            if ((settings.prestigeType === "ascension" && settings.prestigeAscensionPillar) || settings.prestigeType === "demonic") {
+            if (
+                (
+                    (settings.prestigeType === "ascension" && settings.prestigeAscensionPillar) ||
+                    ["demonic", "apotheosis"].includes(settings.prestigeType)
+                ) &&
+                game.global.race.universe !== 'micro'
+            ) {
                 let speciesPillarLevel = game.global.pillars[this.id] ?? 0;
-                let canPillar = !speciesPillarLevel && resources.Harmony.currentQuantity >= 1 && game.global.race.universe !== 'micro';
+                let canPillar = !speciesPillarLevel && resources.Harmony.currentQuantity >= 1;
                 let canUpgrade = speciesPillarLevel && speciesPillarLevel < starLevel;
                 if (canPillar || canUpgrade) {
                     weighting += 1000 * Math.max(0, starLevel - speciesPillarLevel);
+                    // Strongly prioritize pillaring new non-challenge species to upgrading old ones or Equilibrium
+                    if (!speciesPillarLevel && !challengeRace.includes(this.id)) weighting += 100000;
+
                     goals.push("feat_equilibrium_name");
                     // Check genus pillar for Enlightenment
                     if (!noPillarRace.includes(this.id)) {
@@ -10779,7 +10802,7 @@
     function isPillarFinished() {
         let speciesPillarLevel = game.global.pillars[game.global.race.species];
         let canPillar = !speciesPillarLevel && resources.Harmony.currentQuantity >= 1 && game.global.race.universe !== 'micro';
-        let canUpgrade = speciesPillarLevel && speciesPillarLevel < game.alevel();
+        let canUpgrade = speciesPillarLevel && speciesPillarLevel < game.alevel() && game.global.race.universe !== 'micro';
         // Always consider pillared if user doesn't want to wait for pillar, OR can't pillar + can't upgrade existing pillar
         return !settings.prestigeAscensionPillar || (!canPillar && !canUpgrade);
     }

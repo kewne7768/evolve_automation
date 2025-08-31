@@ -2885,6 +2885,7 @@
         AsphodelBunker: new Action("Asphodel Bunker", "eden", "bunker", "eden_asphodel", {garrison: true}),
         AsphodelBlissDen: new Action("Asphodel Bliss Den", "eden", "bliss_den", "eden_asphodel"),
         AsphodelRectory: new Action("Asphodel Rectory", "eden", "rectory", "eden_asphodel", {housing: true}),
+        AsphodelCorruptor: new Action("Asphodel Corruptor (Warlord)", "eden", "corruptor", "eden_asphodel"),
 
         ElysiumMission: new Action("Elysium Mission", "eden", "survey_fields", "eden_elysium"),
         ElysiumFortress: new Action("Elysium Celestial Fortress", "eden", "fortress", "eden_elysium"),
@@ -6504,7 +6505,10 @@
         updateTabs(false);
 
         // Lets set our crate / container resource requirements
-        Object.defineProperty(resources.Crates, "cost", {get: () => isLumberRace() ? {Plywood: 10} : {Stone: 200}});
+        Object.defineProperty(resources.Crates, "cost", { get: () => (
+                (game.global.race['warlord'] && game.global.race['iron_wood']) ? { Lumber: 200 } :
+                isLumberRace() ? { Plywood: 10 } : { Stone: 200 }
+            )});
         resources.Containers.cost["Steel"] = 125;
 
         JobManager.craftingJobs = Object.values(crafter);
@@ -6702,6 +6706,7 @@
         buildings.AsphodelBunker.addSupport(resources.Asphodel_Support);
         buildings.AsphodelBlissDen.addSupport(resources.Asphodel_Support);
         buildings.AsphodelRectory.addSupport(resources.Asphodel_Support);
+        buildings.AsphodelCorruptor.addSupport(resources.Asphodel_Support);
 
         // Init consumptions
         buildings.MoonBase.addResourceConsumption(resources.Oil, 2);
@@ -6893,6 +6898,7 @@
 
         priorityList.push(buildings.AsphodelEncampment);
         priorityList.push(buildings.AsphodelRectory);
+        priorityList.push(buildings.AsphodelCorruptor);
         priorityList.push(buildings.AsphodelSoulEngine);
 
         priorityList.push(buildings.TitanElectrolysis);

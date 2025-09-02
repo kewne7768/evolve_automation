@@ -55,6 +55,7 @@
 
     var settingsRaw = JSON.parse(localStorage.getItem('settings')) ?? {};
     var settings = {};
+    // @ts-expect-error Writes are merged together in script, but reads only happen in snippets
     var snippetData = {};
     var game = null;
     var win = null;

@@ -3176,6 +3176,8 @@
                       bonus = "know";
                   } else if (game.global.city.calendar.moon > 21){
                       bonus = "tax";
+                  } else if ([0, 7, 14, 21].includes(game.global.city.calendar.moon)){
+                    bonus = "rotating";
                   } else {
                       return true;
                   }
@@ -4994,6 +4996,10 @@
         hellAssigned: 0,
         hellReservedSoldiers: 0,
 
+        // Warlord properties
+        minions: 0,
+        enemies: 0,
+
         updateGarrison() {
             let garrison = game.global.civic.garrison;
             if (garrison) {
@@ -5018,6 +5024,8 @@
                 this.hellAssigned = fortress.assigned;
                 this.hellReservedSoldiers = this.getHellReservedSoldiers();
                 this._hellVue = getVueById("fort");
+                this.minions = game.global.portal.minions?.spawns;
+                this.enemies = game.global.portal.throne?.enemy?.length;
             } else {
                 this._hellVue = undefined;
             }
@@ -5275,7 +5283,30 @@
             }
 
             this.hellPatrolSize = Math.max(this.hellPatrolSize - count, 1);
-        }
+        },
+
+        attackEnemyFortress(enemyIndex) {
+            // Validate the enemy index
+            if (enemyIndex < 0 || enemyIndex >= game.global.portal.throne.enemy.length) {
+                return false;
+            }
+
+            // Get the Vue instance for the enemy fortress
+            let fortVue = getVueById("fort");
+            if (!fortVue) {
+                return false;
+            }
+
+            // Call the attack method with the enemy index
+            try {
+                fortVue.attack(enemyIndex);
+                return true;
+            } catch (error) {
+                console.error("Failed to attack enemy fortress:", error);
+                return false;
+            }
+        },
+
     }
 
     var FleetManagerOuter = {
@@ -7399,6 +7430,8 @@
             hellBolsterPatrolRating: 300,
             hellAttractorTopThreat: 9000,
             hellAttractorBottomThreat: 6000,
+            warlordHandleFortress: true,
+            warlordMinimumMinions: 1000,
         }
 
         applySettings(def, reset);
@@ -9062,10 +9095,19 @@
 
         if (game.global.race['warlord']) {
 
-            //if (minionCount >= settings.warMinions) {
-            //    attackEnemyFortress();
-            //}
-            return;
+            let enemies = m.enemies;
+
+            if (enemies > 0 && settings.warlordHandleFortress) {
+
+                let targetMinions = settings.warlordMinimumMinions;
+                let minionCount = m.minions;
+
+                if (minionCount > targetMinions) {
+                    m.attackEnemyFortress(0); // first enemy fortress
+                }
+            }
+
+            return;  // the rest of autoHell is broken for Warlord
         }
 
         // Determine Patrol size and count
@@ -13379,6 +13421,28 @@
             state.conflictTargets.push({name: FleetManagerOuter.nextShipName, cause: "Ship", cost: FleetManagerOuter.nextShipCost});
         }
 
+        // Reserve gems for mechs
+        if (settings.autoMech && MechManager.initLab() && buildings.AsphodelEncampment.count === 0) {
+            let mechBay = game.global.portal.mechbay;
+            let baySpace = mechBay.max - mechBay.bay;
+
+            // only reserve gems if we have bay space
+            if (baySpace > 0) {
+                let newSize = !haveTask("mech") ?
+                    (settings.mechBuild === "random" ? MechManager.getPreferredSize()[0] : mechBay.blueprint.size) :
+                    "titan";
+                let [newGems, newSupply, newSpace] = MechManager.getMechCost({ size: newSize });
+
+                if (newGems > 0) {
+                    state.conflictTargets.push({
+                        name: `Next mech (${newSize})`,
+                        cause: "Mech",
+                        cost: { Soul_Gem: newGems }
+                    });
+                }
+            }
+        }
+
         if (settings.autoTrigger) {
             TriggerManager.resetTargetTriggers();
             let triggerSave = settings.prioritizeTriggers.includes("save");
@@ -14087,9 +14151,8 @@
             const batteries = buildings.IsleSpiritBattery.stateOnCount;
             let coefficient = 0.9;
 
-            // TODO: Use script's implmentation of warlord buildings once they're finalized
-            if (game.global.race['warlord'] && game.global.eden['corruptor'] && game.global.tech?.asphodel >= 13) {
-                const corruptors = game.global.eden.corruptor.on;
+            if (game.global.race['warlord'] && buildings.AsphodelCorruptor && game.global.tech?.asphodel >= 13) {
+                const corruptors = buildings.AsphodelCorruptor.on;
                 coefficient = 1 - (1 + (corruptors || 0) * 0.03) / 10;
             }
 
@@ -16976,6 +17039,11 @@
         addSettingsNumber(currentNode, "hellAttractorBottomThreat", "&emsp;All Attractors on below this threat", "Turn more and more attractors off when getting nearer to the top threat. Auto Power needs to be on for this to work.");
         addSettingsNumber(currentNode, "hellAttractorTopThreat", "&emsp;All Attractors off above this threat", "Turn more and more attractors off when getting nearer to the top threat. Auto Power needs to be on for this to work.");
 
+        // Warlord
+        addSettingsHeader1(currentNode, "Warlord Specific Settings");
+        addSettingsToggle(currentNode, "warlordHandleFortress", "Automatically attack enemy fortresses during Warlord", "Attacks an enemy fortress when minions are above the specified threshold");
+        addSettingsNumber(currentNode, "warlordMinimumMinions", "&emsp;Minimum minions required to attack an enemy fortress", "Will not attack if there are fewer than this many minions");
+
         document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;
     }
 
@@ -17681,7 +17749,8 @@
                              {val: "morale", label: "Morale", hint: "Build only Morale Shrines"},
                              {val: "metal", label: "Metal", hint: "Build only Metal Shrines"},
                              {val: "know", label: "Knowledge", hint: "Build only Knowledge Shrines"},
-                             {val: "tax", label: "Tax", hint: "Build only Tax Shrines"}];
+                             {val: "tax", label: "Tax", hint: "Build only Tax Shrines"},
+                             {val: "rotating", label: "Rotating", hint: "Build Shrines during quarter/full phases for rotating effect shrines"}];                             
         addSettingsSelect(currentNode, "buildingShrineType", "Magnificent shrine", "Auto Build shrines only at moons of chosen shrine", shrineOptions);
         addSettingsNumber(currentNode, "slaveIncome", "Minimum income to buy slave", "Script will use Slave Market only when money is capped, or have income above given number");
 

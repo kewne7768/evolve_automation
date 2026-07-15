@@ -12874,7 +12874,7 @@ declare global {
             return;
         }
 
-        let minimumMoneyAllowed = Math.max(resources.Money.maxQuantity * settings.minimumMoneyPercentage / 100, settings.minimumMoney);
+        let minimumMoneyAllowed = Math.max(resources.Money.maxQuantity * settings.minimumMoneyPercentage / 100, settings.minimumMoney, resources.Money.requestedQuantity);
 
         let currentMultiplier = MarketManager.multiplier; // Save the current multiplier so we can reset it at the end of the function
         let maxMultiplier = MarketManager.getMaxMultiplier();

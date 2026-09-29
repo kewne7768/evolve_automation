@@ -1015,16 +1015,6 @@
 
             if (this.is.prestige) { logPrestige(); }
 
-            // Try skipping game's laggy postBuild hook by invoking the action() directly, instead of going through the
-            // vue action() => game runAction() => game shed.action() => game postBuild() hook.
-            // This will greatly reduce the amount of page redraws.
-            // refresh is really only needed for first building as there are no buildings where building a second unlocks more stuff.
-            if (settings.performanceHackAvoidDrawTech && this.definition.refresh && this.count > 0) {
-                this.definition.action();
-                this.boughtThisTick++;
-                return true;
-            }
-
             // Hide active popper from action, so it won't rewrite it
             let popper = $('#popper');
             if (popper.length > 0 && popper.data('id').indexOf(this._vueBinding) === -1) {
@@ -1418,18 +1408,6 @@
             }
 
             KeyManager.set(false, false, false);
-            // This is a really bad lag hack. ARPAs make a very expensive drawTech() call on every build.
-            // After 10 ARPAs, this will never actually accomplish anything; AFAIK nothing needs more than 10 ARPAs.
-            // Luckily, drawTech() doesn't draw anything if preload tab content is off and we're not on research.
-            // So if we can, we briefly hack that off while buying an ARPA that won't change anything.
-            if (settings.performanceHackAvoidDrawTech && this.count >= 10 && !(this.id === "syphon" && this.count >= 79)) {
-                let mainVue = win.$('#mainColumn > div:first-child')[0].__vue__;
-                mainVue.s.tabLoad = false;
-                getVueById(this._vueBinding).build(this.id, this.currentStep);
-                mainVue.s.tabLoad = true;
-
-                return true;
-            }
             getVueById(this._vueBinding).build(this.id, this.currentStep);
             return true;
         }
@@ -9093,7 +9071,6 @@ declare global {
             displayPrestigeTypeInTopBar: true,
             displayTotalDaysTypeInTopBar: false,
             scriptSettingsExportFilename: "evolve-script-settings.json",
-            performanceHackAvoidDrawTech: false,
         }
 
         applySettings(def, reset);
@@ -18277,7 +18254,7 @@ declare global {
         addSettingsString(currentNode, "scriptSettingsExportFilename", "Export Filename", "Configures the filename used when using the 'Script Settings as File' button. This is useful if you keep multiple different profiles around.");
 
         addSettingsHeader1(currentNode, "Experimental");
-        addSettingsToggle(currentNode, "performanceHackAvoidDrawTech", "Enable performance hack: drawTech avoidance", "Enables very experimental and potentially buggy performance hacks designed to avoid excessive redraws of the research tab, which appears to be very CPU-intensive to redraw. This improves game performance when buying lots of buildings, but also causes potentially limitless amounts of bugs as important game code may be skipped.");
+        // Currently no experimental settings
 
         document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;
     }

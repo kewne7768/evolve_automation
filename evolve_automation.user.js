@@ -2668,11 +2668,11 @@
         TritonFOB: new Action("Triton Forward Base", "space", "fob", "spc_triton"),
         TritonLander: new Action("Triton Troop Lander", "space", "lander", "spc_triton", {smart: true}),
         TritonCrashedShip: new Action("Triton Derelict Ship", "space", "crashed_ship", "spc_triton"),
-        KuiperMission: new Action("Kuiper Mission", "space", "kuiper_mission", "spc_kuiper"),
-        KuiperOrichalcum: new Action("Kuiper Orichalcum Mine", "space", "orichalcum_mine", "spc_kuiper", {smart: true}),
-        KuiperUranium: new Action("Kuiper Uranium Mine", "space", "uranium_mine", "spc_kuiper", {smart: true}),
-        KuiperNeutronium: new Action("Kuiper Neutronium Mine", "space", "neutronium_mine", "spc_kuiper", {smart: true}),
-        KuiperElerium: new Action("Kuiper Elerium Mine", "space", "elerium_mine", "spc_kuiper", {smart: true}),
+        MakemakeMission: new Action("Makemake Mission", "space", "makemake_mission", "spc_makemake"),
+        MakemakeOrichalcum: new Action("Makemake Orichalcum Mine", "space", "orichalcum_mine", "spc_makemake", {smart: true}),
+        MakemakeUranium: new Action("Makemake Uranium Mine", "space", "uranium_mine", "spc_makemake", {smart: true}),
+        MakemakeNeutronium: new Action("Makemake Neutronium Mine", "space", "neutronium_mine", "spc_makemake", {smart: true}),
+        MakemakeElerium: new Action("Makemake Elerium Mine", "space", "elerium_mine", "spc_makemake", {smart: true}),
         ErisMission: new Action("Eris Mission", "space", "eris_mission", "spc_eris"),
         ErisDrone: new Action("Eris Control Relay", "space", "drone_control", "spc_eris"),
         ErisTrooper: new Action("Eris Android Trooper", "space", "shock_trooper", "spc_eris"),
@@ -5448,7 +5448,7 @@
         ClassCrew: {corvette: 2, frigate: 3, destroyer: 4, cruiser: 6, battlecruiser: 8, dreadnought: 10, explorer: 10},
 
         // spc_dwarf is ignored, never having any syndicate
-        Regions: ["spc_moon", "spc_red", "spc_gas", "spc_gas_moon", "spc_belt", "spc_titan", "spc_enceladus", "spc_triton", "spc_kuiper", "spc_eris"],
+        Regions: ["spc_moon", "spc_red", "spc_gas", "spc_gas_moon", "spc_belt", "spc_titan", "spc_enceladus", "spc_triton", "spc_makemake", "spc_eris"],
 
         ShipConfig: {
             class: ['corvette','frigate','destroyer','cruiser','battlecruiser','dreadnought','explorer'],
@@ -5636,7 +5636,7 @@
                       game.actions.space[region].info.syndicate_cap();
                     break;
                 case 'spc_triton':
-                case 'spc_kuiper':
+                case 'spc_makemake':
                 case 'spc_eris':
                     divisor = game.actions.space[region].info.syndicate_cap();
                     break;
@@ -8439,10 +8439,10 @@ declare global {
         buildings.TritonFOB.addResourceConsumption(resources.Helium_3, 125);
         buildings.TritonLander.addResourceConsumption(resources.Oil, 50);
 
-        buildings.KuiperOrichalcum.addResourceConsumption(resources.Oil, 200);
-        buildings.KuiperUranium.addResourceConsumption(resources.Oil, 60);
-        buildings.KuiperNeutronium.addResourceConsumption(resources.Oil, 60);
-        buildings.KuiperElerium.addResourceConsumption(resources.Oil, 125);
+        buildings.MakemakeOrichalcum.addResourceConsumption(resources.Oil, 200);
+        buildings.MakemakeUranium.addResourceConsumption(resources.Oil, 60);
+        buildings.MakemakeNeutronium.addResourceConsumption(resources.Oil, 60);
+        buildings.MakemakeElerium.addResourceConsumption(resources.Oil, 125);
 
         buildings.ErisDrone.addResourceConsumption(resources.Uranium, 5);
 
@@ -8915,11 +8915,11 @@ declare global {
         priorityList.push(buildings.TritonFOB);
         priorityList.push(buildings.TritonLander);
         //priorityList.push(buildings.TritonCrashedShip);
-        priorityList.push(buildings.KuiperMission);
-        priorityList.push(buildings.KuiperOrichalcum);
-        priorityList.push(buildings.KuiperUranium);
-        priorityList.push(buildings.KuiperNeutronium);
-        priorityList.push(buildings.KuiperElerium);
+        priorityList.push(buildings.MakemakeMission);
+        priorityList.push(buildings.MakemakeOrichalcum);
+        priorityList.push(buildings.MakemakeUranium);
+        priorityList.push(buildings.MakemakeNeutronium);
+        priorityList.push(buildings.MakemakeElerium);
         priorityList.push(buildings.ErisMission);
         priorityList.push(buildings.ErisDrone);
         priorityList.push(buildings.ErisTank);
@@ -9736,7 +9736,7 @@ declare global {
         setOuterRegion("spc_titan", 5, 0.9, 1); // Adamantite
         setOuterRegion("spc_enceladus", 3, 0.9, 1); // Quantium
         setOuterRegion("spc_triton", 10, 0.95, 2); // Encrypted data
-        setOuterRegion("spc_kuiper", 5, 0.9, 2); // Orichalcum
+        setOuterRegion("spc_makemake", 5, 0.9, 2); // Orichalcum
         setOuterRegion("spc_eris", 100, 0.01, 1); // Encrypted data
 
         applySettings(def, reset);
@@ -13576,28 +13576,28 @@ declare global {
                             resources.Oil.incomeAdusted = true;
                         }
                     }
-                    // Kuiper Mines
+                    // Makemake Mines
                     // TODO: Disable with 100% syndicate
-                    if (building === buildings.KuiperOrichalcum && !resources.Orichalcum.isUseful()) {
-                        maxStateOn = Math.min(maxStateOn, resources.Orichalcum.getBusyWorkers("space_kuiper_mine", currentStateOn, [resources.Orichalcum.title]));
+                    if (building === buildings.MakemakeOrichalcum && !resources.Orichalcum.isUseful()) {
+                        maxStateOn = Math.min(maxStateOn, resources.Orichalcum.getBusyWorkers("space_makemake_mine", currentStateOn, [resources.Orichalcum.title]));
                         if (maxStateOn !== currentStateOn) {
                             resources.Orichalcum.incomeAdusted = true;
                         }
                     }
-                    if (building === buildings.KuiperUranium && !resources.Uranium.isUseful()) {
-                        maxStateOn = Math.min(maxStateOn, resources.Uranium.getBusyWorkers("space_kuiper_mine", currentStateOn, [resources.Uranium.title]));
+                    if (building === buildings.MakemakeUranium && !resources.Uranium.isUseful()) {
+                        maxStateOn = Math.min(maxStateOn, resources.Uranium.getBusyWorkers("space_makemake_mine", currentStateOn, [resources.Uranium.title]));
                         if (maxStateOn !== currentStateOn) {
                             resources.Uranium.incomeAdusted = true;
                         }
                     }
-                    if (building === buildings.KuiperNeutronium && !resources.Neutronium.isUseful()) {
-                        maxStateOn = Math.min(maxStateOn, resources.Neutronium.getBusyWorkers("space_kuiper_mine", currentStateOn, [resources.Neutronium.title]));
+                    if (building === buildings.MakemakeNeutronium && !resources.Neutronium.isUseful()) {
+                        maxStateOn = Math.min(maxStateOn, resources.Neutronium.getBusyWorkers("space_makemake_mine", currentStateOn, [resources.Neutronium.title]));
                         if (maxStateOn !== currentStateOn) {
                             resources.Neutronium.incomeAdusted = true;
                         }
                     }
-                    if (building === buildings.KuiperElerium && !resources.Elerium.isUseful()) {
-                        maxStateOn = Math.min(maxStateOn, resources.Elerium.getBusyWorkers("space_kuiper_mine", currentStateOn, [resources.Elerium.title]));
+                    if (building === buildings.MakemakeElerium && !resources.Elerium.isUseful()) {
+                        maxStateOn = Math.min(maxStateOn, resources.Elerium.getBusyWorkers("space_makemake_mine", currentStateOn, [resources.Elerium.title]));
                         if (maxStateOn !== currentStateOn) {
                             resources.Elerium.incomeAdusted = true;
                         }
@@ -15566,7 +15566,7 @@ declare global {
             + (game.global.tech.syard_sensor ?? 0)
             + (haveTech('titan', 3) && haveTech('enceladus', 2) ? 1 : 0) // Enceladus syndicate
             + (haveTech('triton', 2) ? 1 : 0) // Triton syndicate
-            + (haveTech('kuiper') ? 1 : 0) // Kuiper syndicate
+            + (haveTech('makemake') ? 1 : 0) // Makemake syndicate
             + (haveTech('eris') ? 1 : 0) // Eris syndicate
             + (haveTech('eris', 2) ? 1 : 0) // Eris scanning
             + (haveTech('titan_ai_core') ? 1 : 0) // AI core built, drones unlocked

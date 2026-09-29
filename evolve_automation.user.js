@@ -17193,10 +17193,12 @@ declare global {
         let importExportNode = $('<div id="script_importExportButtons" style="margin-top: 6px">');
         importExportBase.after(importExportNode);
 
+        importExportNode.append(` <div class="field"><label class="label">Evolve Automation UserScript</div>`);
+
         importExportNode.append(' <button id="script_settingsImport" class="button">Import Script Settings</button>');
 
         $('#script_settingsImport').on("click", function() {
-            const str = $('#importExport').val();
+            const str = $('#importExport textarea').val();
             if (str.length > 0) {
                 if (importSettings(str)) {
                     $('#importExport').val("");
@@ -17207,8 +17209,8 @@ declare global {
         importExportNode.append(' <button id="script_settingsExport" class="button">Export Script Settings</button>');
 
         $('#script_settingsExport').on("click", function() {
-            $('#importExport').val(exportSettings());
-            $('#importExport').select();
+            $('#importExport textarea').val(exportSettings());
+            $('#importExport textarea').select();
             document.execCommand('copy');
         });
 

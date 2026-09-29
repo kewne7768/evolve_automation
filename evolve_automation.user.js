@@ -22427,11 +22427,11 @@ declare global {
 
     function getVueById(elementId) {
         let element = win.document.getElementById(elementId);
-        if (element === null || !element.__vue__) {
+        if (element === null || !element.__vue_proxy__) {
             return undefined;
         }
 
-        return element.__vue__;
+        return element.__vue_proxy__;
     }
 
     // Recursively traverse through object, wrapping all functions in getters

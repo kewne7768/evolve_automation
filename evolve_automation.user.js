@@ -15561,14 +15561,20 @@ declare global {
             state.tabHash += (game.global.race.ss_genus ?? 'none').split('').reduce((a,b)=>{a=((a<<5)-a)+b.charCodeAt(0);return a&a},0);
         }
 
+        // TODO VUE3: See if tab updates are even needed
         if (update && state.tabHash !== oldHash){
-            let mainVue = win.$('#mainColumn > div:first-child')[0].__vue__;
+            if (true) {
+                console.info("[Script Vue3 porting] Skipping updateTabs");
+                return;
+            }
+            let mainVue = document.querySelector('#mainColumn > div:first-child').__vue_proxy__;
+            let civTabsOld = mainVue.s.civTabs;
             mainVue.s.civTabs = 7;
             mainVue.s.tabLoad = false;
             mainVue.toggleTabLoad();
             mainVue.s.tabLoad = true;
             mainVue.toggleTabLoad();
-            mainVue.s.civTabs = game.global.settings.civTabs;
+            mainVue.s.civTabs = civTabsOld;
             return true;
         } else {
             return false;

@@ -7901,15 +7901,25 @@ declare global {
             return this.openedByScript || document.getElementById("modalBox") !== null || document.getElementById("scriptModal")?.style.display === "block";
         },
 
+        // Modals are drawn asynchronously, there is a small period where a .modal exists, but the contents aren't available yet
+        // checkCallbacks will end up being called twice, once in this "pending" state where the contents are empty,
+        // and again with the drawn dialog box where a div exists inside #modalBox
+        isPendingState() {
+            return document.querySelector("body > .modal") && !document.querySelector("#modalBox div");
+
+        },
+
         checkCallbacks() {
+            if (WindowManager.isPendingState()) {
+                return;
+            }
             // We only care if the script itself opened the modal. If the user did it then ignore it.
             // There must be a call back function otherwise there is nothing to do.
             if (WindowManager.currentModalWindowTitle() === WindowManager._callbackWindowTitle &&
                     WindowManager.openedByScript && WindowManager._callbackFunction) {
-
                 WindowManager._callbackFunction();
 
-                let modalCloseBtn = document.querySelector('.modal .modal-close');
+                let modalCloseBtn = document.querySelector('#modalBox .modalClose');
                 if (modalCloseBtn !== null) {
                     modalCloseBtn.click();
                 }

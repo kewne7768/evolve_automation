@@ -9993,13 +9993,20 @@ declare global {
         migrateSetting("jobDisableCraftsmans", "productionCraftsmen", (v) => v ? "nocraft" : "always");
         migrateSetting("activeTriggerUI", "activeTargetsUI", (v) => v);
         migrateSetting("autoAssembleGene", "autoGenetics", (v) => v);
-        // Handle ingame ID change
-        migrateSetting("batportal-harbour", "batportal-harbor", (v) => v);
-        migrateSetting("bld_p_portal-harbour", "bld_p_portal-harbor", (v) => v);
-        migrateSetting("bld_s_portal-harbour", "bld_s_portal-harbor", (v) => v);
-        migrateSetting("bld_s2_portal-harbour", "bld_s2_portal-harbor", (v) => v);
-        migrateSetting("bld_m_portal-harbour", "bld_m_portal-harbor", (v) => v);
-        migrateSetting("bld_w_portal-harbour", "bld_w_portal-harbor", (v) => v);
+        // Handle ingame building ID changes
+        const renamedBuildingsMap = {
+            "portal-harbour": "portal-harbor",
+            "space-kuiper_mission": "space-makemake_mission",
+        };
+        Object.entries(renamedBuildingsMap).forEach(([oldName, newName]) => {
+            migrateSetting(`bat${oldName}`, `bat${newName}`, (v) => v);
+            migrateSetting(`bld_p_${oldName}`, `bld_p_${newName}`, (v) => v);
+            migrateSetting(`bld_s_${oldName}`, `bld_s_${newName}`, (v) => v);
+            migrateSetting(`bld_s2_${oldName}`, `bld_s2_${newName}`, (v) => v);
+            migrateSetting(`bld_m_${oldName}`, `bld_m_${newName}`, (v) => v);
+            migrateSetting(`bld_w_${oldName}`, `bld_w_${newName}`, (v) => v);
+        });
+
         // Migrate setting as override, in case if someone actualy use it
         if (settingsRaw.hasOwnProperty("genesAssembleGeneAlways")) {
             if (settingsRaw.overrides.genesAssembleGeneAlways) {

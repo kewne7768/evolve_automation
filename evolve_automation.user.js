@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.147
+// @version      3.3.1.150
 // @description  try to take over the world!
 // @downloadURL  https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.user.js
 // @updateURL    https://github.com/kewne7768/evolve_automation/raw/main/evolve_automation.meta.js
@@ -1133,7 +1133,7 @@
 
         getUselessSupport() {
             // Starbase and Habitats are exceptions, they're always useful
-            if (this === buildings.GatewayStarbase || this === buildings.AlphaHabitat ||
+            if (this.is.housing || this.is.garrison ||
                (this === buildings.SpaceNavBeacon && game.global.race['orbit_decayed'])) {
                 return null;
             }
@@ -1577,6 +1577,10 @@
             return game.races[this.id].type;
         }
 
+        get hybrid() {
+            return game.races[this.id].hybrid ?? [];
+        }
+
         getWeighting(verbose) {
             // Locked races always have zero weighting
             let habitability = this.getHabitability();
@@ -1843,7 +1847,9 @@
                 case "eldritch":
                     return game.global.stats.achieve['nightmare']?.mg ? 1 : 0;
                 case "hybrid":
-                    return game.global.stats.achieve['godslayer'] ? 1 : 0;
+                    return (isAchievementUnlocked("godslayer", 1, "standard") &&
+                      (!this.hybrid.includes("synthetic") || isAchievementUnlocked("obsolete", 5, "standard")) &&
+                      (!this.hybrid.includes("eldritch") || isAchievementUnlocked("nightmare", 1, "magic"))) ? 1 : 0;
                 case undefined: // Nonexistent custom
                     return 0;
                 default:
@@ -1887,7 +1893,14 @@
                 case "eldritch":
                     return game.loc('wiki_achieve_nightmare');
                 case "hybrid":
-                    return game.loc('wiki_achieve_godslayer');
+                    let desc = game.loc('wiki_achieve_godslayer');
+                    if (this.hybrid.includes("synthetic")) {
+                        desc += `<br>${game.loc('wiki_achieve_obsolete')}`;
+                    }
+                    if (this.hybrid.includes("eldritch")) {
+                        desc += `<br>${game.loc('wiki_achieve_nightmare')}`;
+                    }
+                    return desc;
                 case undefined:
                     return "Unknown.";
                 default: // No special conditions
@@ -12590,7 +12603,7 @@ declare global {
     }
 
     function isWhiteholePrestigeAvailable() {
-        return getBlackholeMass() >= settings.prestigeWhiteholeMinMass && (techIds["tech-exotic_infusion"].isUnlocked() || techIds["tech-infusion_check"].isUnlocked() || techIds["tech-infusion_confirm"].isUnlocked());
+        return resources.Soul_Gem.currentQuantity >= 10 && getBlackholeMass() >= settings.prestigeWhiteholeMinMass && (techIds["tech-exotic_infusion"].isUnlocked() || techIds["tech-infusion_check"].isUnlocked() || techIds["tech-infusion_confirm"].isUnlocked());
     }
 
     function isApocalypsePrestigeAvailable() {

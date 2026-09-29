@@ -14,8 +14,8 @@
 // @author       SkyeAmphi
 // @match        https://pmotschmann.github.io/Evolve/
 // @grant        none
-// @require      https://code.jquery.com/jquery-3.7.1.min.js
-// @require      https://code.jquery.com/ui/1.12.1/jquery-ui.min.js
+// @require      https://code.jquery.com/jquery-4.0.0.min.js
+// @require      https://code.jquery.com/ui/1.14.2/jquery-ui.min.js
 // @require      https://kewne7768.github.io/monaco-export/monaco-export.js?0.53.0
 // ==/UserScript==
 //
@@ -16615,7 +16615,7 @@ declare global {
         // Make sure we have jQuery UI even if script was injected without *monkey
         if (!$.ui) {
             let el = document.createElement("script");
-            el.src = "https://code.jquery.com/ui/1.12.1/jquery-ui.min.js";
+            el.src = "https://code.jquery.com/ui/1.14.2/jquery-ui.min.js";
             el.onload = mainAutoEvolveScript;
             el.onerror = () => alert("Can't load jQuery UI. Check browser console for details.");
             document.body.appendChild(el);

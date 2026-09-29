@@ -7958,28 +7958,13 @@ declare global {
         _userState: {x100: false, x25: false, x10: false},
         _mode: "none",
 
-        init($game) {
-            let events = $game ? $game._data(win.document)?.events : null;
-            let set = events?.keydown?.[0]?.handler ?? null;
-            let unset = events?.keyup?.[0]?.handler ?? null;
-            let all = events?.mousemove?.[0]?.handler ?? null;
-
-            if (!all && (!set || !unset)) { // Fallback, if there's no handlers in JQuery data
-                this._setFn = (e) => document.dispatchEvent(new KeyboardEvent("keydown", e));
-                this._unsetFn = (e) => document.dispatchEvent(new KeyboardEvent("keyup", e));
-                this._allFn = null;
-            } else if (needSandboxBypass) { // FF fix
-                this._setFn = (e) => set(cloneInto(e, unsafeWindow));
-                this._unsetFn = (e) => unset(cloneInto(e, unsafeWindow));
-                this._allFn = (e) => all(cloneInto(e, unsafeWindow));
-            } else {
-                this._setFn = set;
-                this._unsetFn = unset;
-                this._allFn = all;
-            }
+        init() {
+            this._setFn = (e) => document.dispatchEvent(new KeyboardEvent("keydown", e));
+            this._unsetFn = (e) => document.dispatchEvent(new KeyboardEvent("keyup", e));
+            this._allFn = (e) => document.dispatchEvent(new KeyboardEvent("mousemove", e));
 
             // Try to preserve real user state as best as possible by listening for events ourselves.
-            // Our fake events will either not be seen at all (if jQuery) or will not set isTrusted due to being fake (if fallback mode).
+            // Our fake events will not set isTrusted due to being fake.
             ["keyup", "keydown"].forEach(etype => win.document.addEventListener(etype, (e) => {
                 if (e.isTrusted) {
                     let keyCode = e.key || e.keyCode;
@@ -16531,45 +16516,6 @@ declare global {
         state.soulGemLast = resources.Soul_Gem.currentQuantity;
     }
 
-    // The game has its own copy of jQuery, we need our own copy of jQuery in case we run in the sandbox,
-    // no way to make it conditional due to userscript limitations, and other scripts may also have their own ones.
-    // We really want to find the game's keyup/keydown/mousemove event handler so we can use it for reliable multiplier key faking;
-    // using dispatchEvent is not nearly as reliable and is known to silently fail in some scenarios.
-    // Getting those handlers involves poking into jQuery internals.
-    // We try to remove our copy of jQuery from the global $ stack ASAP to make sure it doesn't leak, but that might not always work,
-    // and sometimes other scripts also have their own jQuery.
-    // So what we do here is we noConflict() potentially the *whole chain of jQuery $ instances* looking for the one where the game put the
-    // key handling events, and then try to put that one back (or whatever was there before if we fail).
-    // At the time this function is ran, the game will certainly have loaded, so it should be in there somewhere.
-    // This should, hopefully, be safe in most cases as we pull and push the reference from unsafeWindow if required.
-    // And thankfully, noConflict is idempotent, so this doesn't change the overall page state in any way.
-    // TLDR: hacking into jquery internals isn't easy if you have to juggle multiple jqueries
-    function findGameJquery() {
-        let $window = win.$;
-        let $game = null;
-        // Just in case there is somehow an infinite loop of jQuery instances...
-        const maximum = 16;
-        let i = 0;
-
-        while (win.$ && ++i < maximum) {
-            const eventTable = win.$._data(win.document).events;
-            const isGame = eventTable?.['mousemove'] && eventTable?.['keydown'] && eventTable?.['keyup'];
-            if (isGame) {
-                $game = win.$;
-                break;
-            }
-            else {
-                win.$.noConflict();
-            }
-        }
-
-        // The global $ is the only one that will properly respond to `$().off()` calls.
-        // Arguably, it might be better to put the game's $ here, but the game never calls `$().off()`, so leaving it unchanged
-        // is the most safe option.
-        win.$ = $window;
-        return $game;
-    }
-
     function mainAutoEvolveScript() {
         // This is a hack to check that the entire page has actually loaded. The queueColumn is one of the last bits of the DOM
         // so if it is there then we are good to go. Otherwise, wait a little longer for the page to load.
@@ -16652,7 +16598,7 @@ declare global {
 
         addErrorHandler();
         addScriptStyle();
-        KeyManager.init(findGameJquery());
+        KeyManager.init();
         initialiseState();
         initialiseRaces();
         initialiseScript();
@@ -22735,18 +22681,5 @@ declare global {
         shipCosts: (bp) => game.shipCosts(cloneInto(bp, unsafeWindow)),
     };
 
-    // Try to remove our jQuery $ copy from the global stack, but only if all of these are true:
-    // * we don't have to use sandbox mode (have window + no unsafeWindow or === to window). noConflict assumes it can write to window directly.
-    // * the game's keydown event isn't registered in the global copy - if it is, it's too late to remove or our copy never got loaded in
-    // * there is still a global $ after removal
-    // This should be the case most of the time. We still keep the local $ reference to it.
-    // This isn't required but helps reduce problems with other scripts bringing their own jQuery copy.
-    if (window && (typeof unsafeWindow === "undefined" || unsafeWindow === window) && !window.$._data(window.document).events?.['keydown']) {
-        let tmp = window.$.noConflict();
-        if (!window.$) {
-            window.$ = tmp;
-        }
-    }
-
-    $().ready(mainAutoEvolveScript);
+    $(mainAutoEvolveScript);
 })($);

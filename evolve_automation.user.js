@@ -5245,12 +5245,14 @@
             if (buildings.PitSoulForge.count > 0 && (buildings.PitSoulForge.autoStateEnabled || buildings.PitSoulForge.stateOnCount > 0) && soldierRating > 0) {
                 // Calculate number of soldiers needed for Soul Forge
                 let base = game.global.race['warlord'] ? 400 : 650;
-             let soulForgeSoldiers = Math.round(base / soldierRating);
-        
+                let soulForgeSoldiers = Math.ceil(base / soldierRating);
+
                 // Adjust for gun emplacements
                 if (buildings.PitGunEmplacement.count > 0) {
-                    soulForgeSoldiers -= Math.floor(buildings.PitGunEmplacement.stateOnCount * 1.5);
-                    soulForgeSoldiers = Math.max(1, soulForgeSoldiers);
+                    let soldiersPerGun = game.global.tech.hell_gun >= 2 ? 2 : 1;
+                    soldiersPerGun *= traitVal('high_pop', 0, 1);  // jobScale equivalent
+                    soulForgeSoldiers -= buildings.PitGunEmplacement.stateOnCount * soldiersPerGun;
+                    soulForgeSoldiers = Math.max(0, soulForgeSoldiers);  // Can be 0 if guns cover all
                 }
 
                 soldiers += soulForgeSoldiers;
